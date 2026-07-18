@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type EffectControls, type EffectPreset } from './effects';
+import { effectLayerFilter, extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
+import { detectClubs, drawPoiLayer, updateTracks, type PoiControls, type PoiTrack } from './pixelPoi';
+import { isPatternId } from './pixelPoiPatterns';
 
 type Props = {
   source: 'camera' | 'upload';
   preset: EffectPreset;
   controls: EffectControls;
+  composite: CompositeControls;
   resetKey: number;
+  poiControls: PoiControls;
+  poiImageUrl: string;
   onCameraError: (message: string) => void;
 };
 
-export function VideoStage({ source, preset, controls, resetKey, onCameraError }: Props) {
+export function VideoStage({ source, preset, controls, composite, resetKey, poiControls, poiImageUrl, onCameraError }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -21,11 +26,34 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
   const [time, setTime] = useState(0);
   const [fileName, setFileName] = useState('');
   const [startingCamera, setStartingCamera] = useState(false);
-  const effectRef = useRef({ preset, controls });
+  const effectRef = useRef({ preset, controls, composite });
+  const poiSettingsRef = useRef(poiControls);
+  const poiImageRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
-    effectRef.current = { preset, controls };
-  }, [preset, controls]);
+    effectRef.current = { preset, controls, composite };
+  }, [preset, controls, composite]);
+
+  useEffect(() => {
+    poiSettingsRef.current = poiControls;
+  }, [poiControls]);
+
+  useEffect(() => {
+    poiImageRef.current = null;
+    if (poiImageUrl) {
+      const image = new Image();
+      image.onload = () => {
+        const pattern = document.createElement('canvas');
+        pattern.width = 300;
+        pattern.height = 180;
+        const patternCtx = pattern.getContext('2d')!;
+        const scale = Math.min(pattern.width / image.width, pattern.height / image.height);
+        patternCtx.drawImage(image, (pattern.width - image.width * scale) / 2, (pattern.height - image.height * scale) / 2, image.width * scale, image.height * scale);
+        poiImageRef.current = patternCtx.getImageData(0, 0, pattern.width, pattern.height);
+      };
+      image.src = poiImageUrl;
+    }
+  }, [poiImageUrl]);
 
   useEffect(() => {
     setReady(false);
@@ -55,6 +83,10 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
     const trailCtx = trailCanvas.getContext('2d')!;
     const transformed = document.createElement('canvas');
     const transformedCtx = transformed.getContext('2d')!;
+    const poiCanvas = document.createElement('canvas');
+    const poiCtx = poiCanvas.getContext('2d')!;
+    let tracks: PoiTrack[] = [];
+    let nextTrackId = 1;
     let background: Float32Array | null = null;
     let mask: ImageData | null = null;
     let frame = 0;
@@ -66,7 +98,8 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
 
     const resize = () => {
       const aspect = video.videoWidth / video.videoHeight || 16 / 9;
-      const width = Math.min(1280, video.videoWidth || 1280);
+      const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+      const width = Math.min(1920, Math.round(Math.max(video.videoWidth || 0, canvas.clientWidth * pixelRatio || 1280)));
       const height = Math.round(width / aspect);
       canvas.width = width;
       canvas.height = height;
@@ -74,6 +107,9 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
       trackCanvas.height = Math.round(quality / aspect);
       trailCanvas.width = transformed.width = trackCanvas.width;
       trailCanvas.height = transformed.height = trackCanvas.height;
+      poiCanvas.width = canvas.width;
+      poiCanvas.height = canvas.height;
+      tracks = [];
       background = null;
       mask = null;
     };
@@ -103,9 +139,41 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
       if (!mask) mask = new ImageData(trackCanvas.width, trackCanvas.height);
       const active = effectRef.current;
       const settings = active.controls;
+      const compositing = active.composite;
       const activePreset = active.preset;
       extractMotion(current, background, mask, motionThreshold(settings.sensitivity), lightThreshold(settings.isolation));
       trackCtx.putImageData(mask, 0, 0);
+
+      if (isPatternId(activePreset.id)) {
+        const image = poiImageRef.current;
+        const poi = poiSettingsRef.current;
+        tracks = updateTracks(tracks, detectClubs(mask), now, poi, activePreset.id, () => nextTrackId++);
+        poiCtx.setTransform(1, 0, 0, 1, 0, 0);
+        poiCtx.clearRect(0, 0, poiCanvas.width, poiCanvas.height);
+        poiCtx.save();
+        poiCtx.scale(poiCanvas.width / trackCanvas.width, poiCanvas.height / trackCanvas.height);
+        drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null);
+        poiCtx.restore();
+        ctx.globalCompositeOperation = compositing.blendMode;
+        if (poi.glow > 0) {
+          ctx.save();
+          ctx.globalAlpha = poi.glow / 150;
+          ctx.filter = effectLayerFilter(compositing.invert, `blur(${Math.max(2, poi.glow * 0.065)}px)`);
+          ctx.drawImage(poiCanvas, 0, 0);
+          ctx.restore();
+        }
+        ctx.globalAlpha = Math.min(1, poi.brightness / 82);
+        ctx.filter = effectLayerFilter(compositing.invert);
+        ctx.drawImage(poiCanvas, 0, 0);
+        ctx.filter = 'none';
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        if (source === 'upload' && now - lastUiUpdate > 200) {
+          lastUiUpdate = now;
+          setTime(video.currentTime);
+        }
+        return;
+      }
 
       transformedCtx.clearRect(0, 0, transformed.width, transformed.height);
       transformedCtx.filter = settings.blur > 0 ? `blur(${settings.blur * 0.08}px)` : 'none';
@@ -138,16 +206,18 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
         trailCtx.filter = 'none';
       }
 
-      ctx.globalCompositeOperation = 'screen';
+      ctx.globalCompositeOperation = compositing.blendMode;
       if (settings.glow > 0) {
         ctx.save();
         ctx.globalAlpha = settings.glow / 100 * settings.intensity / 100;
-        ctx.filter = `blur(${settings.glow / 10}px)`;
+        ctx.filter = effectLayerFilter(compositing.invert, `blur(${settings.glow / 10}px)`);
         ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
       ctx.globalAlpha = settings.intensity / 100;
+      ctx.filter = effectLayerFilter(compositing.invert);
       ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
+      ctx.filter = 'none';
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
       if (source === 'upload' && now - lastUiUpdate > 200) {

@@ -7,7 +7,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; background: #090a0d; }
+body { margin: 0; min-width: 0; background: #090a0d; }
 button, input { font: inherit; }
 button { color: inherit; }
 
@@ -37,17 +37,54 @@ h1 span { color: #ff5a5f; }
 .filename { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8b8e96; }
 
 aside { min-height: 0; overflow: auto; padding: 22px; border-left: 1px solid #25272d; background: #0d0f13; }
+.pattern-categories { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border: 1px solid #30323a; border-radius: 8px; background: #090a0d; }
+.pattern-categories button { display: grid; justify-items: center; gap: 2px; min-width: 0; padding: 8px 4px 7px; border: 0; border-radius: 5px; background: transparent; color: #8c8f98; cursor: pointer; font-size: 11px; font-weight: 700; }
+.pattern-categories button:hover { color: #e3e1de; background: #17191e; }
+.pattern-categories button[aria-selected='true'] { color: #fff; background: #29242b; box-shadow: inset 0 -2px #ff5a5f; }
+.pattern-categories button span { color: #676a73; font-size: 9px; font-variant-numeric: tabular-nums; }
+.pattern-categories button[aria-selected='true'] span { color: #ff8b8e; }
+.category-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 18px 1px 10px; }
+.category-heading h2 { margin: 0; font-size: 14px; letter-spacing: -.2px; }
+.category-heading p { margin: 0; color: #6f727a; font-size: 9px; }
 .presets { display: grid; gap: 8px; }
 .preset { position: relative; width: 100%; display: grid; grid-template-columns: 94px 1fr; gap: 15px; align-items: center; padding: 7px; border: 1px solid transparent; border-radius: 8px; text-align: left; background: transparent; cursor: pointer; }
 .preset:hover { background: #14161b; }
 .preset.active { border-color: #ff5a5f; }
 .preset.active strong { color: #ff666a; }
 .preset strong { font-size: 15px; }
+.preset-card { position: relative; padding: 7px; border: 1px solid transparent; border-radius: 8px; background: transparent; }
+.preset-card:hover { background: #14161b; }
+.preset-card.active { border-color: #ff5a5f; }
+.preset-summary { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 11px; align-items: center; }
+.preset-summary .preset-art { height: 48px; }
+.preset-summary strong { min-width: 0; font-size: 14px; line-height: 1.15; }
+.preset-card.active strong { color: #ff666a; }
+.active-mark { color: #ff8b8e; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.preset-description { display: block; min-height: 27px; margin: 7px 2px 0; color: #7f828a; font-size: 10px; line-height: 1.35; }
+.preset-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
+.preset-actions button { min-height: 32px; padding: 5px 7px; border: 1px solid #3d4048; border-radius: 5px; background: #121419; color: #b8bac1; cursor: pointer; font-size: 11px; font-weight: 650; }
+.preset-actions button:hover { border-color: #696c75; color: #f4f2ef; background: #1a1c22; }
+.preset-actions .use-defaults { border-color: #69383d; color: #ff9a9d; }
 .preset-art { height: 58px; border: 1px solid #393b43; border-radius: 5px; background-color: #08090b; background-size: 100% 100%; }
 .neon .preset-art { background-image: radial-gradient(ellipse at 70% 50%, #17191e 0 14%, transparent 15%), linear-gradient(165deg, transparent 15%, #ff5a8a 26%, transparent 35%, #735cff 50%, transparent 60%, #31d8ff 72%, transparent 80%); }
 .ghost .preset-art { background-image: radial-gradient(ellipse at 68% 50%, #a8f4ff 0 3%, transparent 4% 9%, #46cde955 10% 13%, transparent 14% 20%, #46cde933 21% 25%, transparent 26%); }
 .smoke .preset-art { background-image: radial-gradient(ellipse at 35% 54%, #b65dff88, transparent 32%), radial-gradient(ellipse at 65% 45%, #ff6a9d55, transparent 42%); }
 .vortex .preset-art { background-image: repeating-radial-gradient(ellipse at 56% 50%, transparent 0 8px, #7654ff99 10px 12px, transparent 15px 21px); }
+.neon-rails .preset-art { background-image: linear-gradient(155deg, transparent 10%, #20e8ff 12% 15%, transparent 17% 36%, #ff36c8 38% 41%, transparent 43% 58%, #dffcff 60% 61%, transparent 63%); }
+.prism-ribbon .preset-art { background-image: linear-gradient(25deg, transparent 12%, #20e8ff66 14% 30%, #9d45ff77 31% 46%, #ff36c877 47% 61%, #8cff3d66 62% 71%, transparent 73%); clip-path: polygon(0 75%, 18% 40%, 36% 67%, 54% 22%, 74% 55%, 100% 12%, 100% 82%, 76% 75%, 56% 50%, 38% 88%, 18% 62%, 0 96%); }
+.chromatic-echoes .preset-art { background-image: repeating-linear-gradient(118deg, transparent 0 9px, #20e8ff 10px 12px, transparent 13px 19px, #ff36c8aa 20px 22px, transparent 23px 30px); }
+.electric-comets .preset-art { background-image: linear-gradient(145deg, transparent 34%, #eaffff 35% 37%, transparent 38%), linear-gradient(120deg, transparent 48%, #20e8ff 49% 51%, transparent 52%), linear-gradient(170deg, transparent 60%, #53a8ff 61% 63%, transparent 64%); filter: drop-shadow(0 0 4px #20e8ff); }
+.kinetic-lattice .preset-art { background-image: linear-gradient(35deg, transparent 34%, #20e8ff 35% 37%, transparent 38%), linear-gradient(145deg, transparent 42%, #ff36c8 43% 45%, transparent 46%), linear-gradient(15deg, transparent 57%, #9d45ff 58% 60%, transparent 61%); }
+.psychedelic-serpent .preset-art { background-image: repeating-radial-gradient(ellipse at 10% 90%, transparent 0 8px, #20e8ff 9px 10px, transparent 11px 16px, #ff36c8 17px 18px, transparent 19px 24px); }
+.apex-shatter .preset-art { background-image: conic-gradient(from 20deg at 58% 52%, transparent 0 8%, #20e8ff 9% 10%, transparent 11% 20%, #ff36c8 21% 22%, transparent 23% 37%, #fff 38% 39%, transparent 40% 62%, #9d45ff 63% 64%, transparent 65%); }
+.pixel-mosaic .preset-art { background-image: linear-gradient(45deg, transparent 15%, #20e8ff 16% 25%, transparent 26% 43%, #ff36c8 44% 55%, transparent 56% 74%, #8cff3d 75% 83%, transparent 84%); background-size: 28px 28px; }
+.radial-pov .preset-art { background-image: repeating-conic-gradient(from 18deg, transparent 0 8deg, #20e8ff 10deg 15deg, #ff36c8 18deg 23deg, transparent 26deg 31deg), radial-gradient(circle, transparent 0 18%, #9d45ff 20% 24%, transparent 27% 42%, #8cff3d 44% 47%, transparent 50%); filter: drop-shadow(0 0 6px #20e8ff); }
+.acid-blooms .preset-art { background-image: repeating-conic-gradient(from 14deg at 50% 52%, #ff3bbd 0 10deg, #ffef48 11deg 20deg, #57ff73 21deg 30deg, #28e8ff 31deg 40deg, #8754ff 41deg 50deg), radial-gradient(circle, #fff 0 7%, #ff4bd8 8% 15%, transparent 16%); background-size: 38px 38px; filter: saturate(1.3) drop-shadow(0 0 4px #ff2bc2); }
+.liquid-portal .preset-art { background-image: repeating-radial-gradient(ellipse at 56% 48%, #fff 0 1px, #23efff 2px 4px, #8c42ff 5px 8px, #ff39bb 9px 12px, #ffef53 13px 15px, transparent 16px 20px); filter: saturate(1.4) drop-shadow(0 0 5px #8f44ff); }
+.kaleido-tunnel .preset-art { background-image: repeating-conic-gradient(from 22deg, #ff2eb9 0 8deg, #7b49ff 9deg 17deg, #20efff 18deg 26deg, #fff24f 27deg 35deg), radial-gradient(circle, transparent 0 18%, #fff 19% 21%, transparent 22% 37%, #ff46bd 38% 40%, transparent 41%); clip-path: polygon(50% 0, 61% 35%, 98% 20%, 69% 50%, 98% 80%, 61% 65%, 50% 100%, 39% 65%, 2% 80%, 31% 50%, 2% 20%, 39% 35%); }
+.melting-rainbow .preset-art { background-image: linear-gradient(112deg, transparent 0 9%, #ff2da9 10% 22%, #ffef3d 23% 34%, #53ff67 35% 46%, #23dcff 47% 58%, #8249ff 59% 70%, #ff37d1 71% 82%, transparent 83%), radial-gradient(ellipse at 25% 92%, #ffef3d 0 8%, transparent 9%), radial-gradient(ellipse at 65% 98%, #23dcff 0 11%, transparent 12%); filter: saturate(1.45) blur(.2px); }
+.hypno-eyes .preset-art { background-image: radial-gradient(ellipse at 24% 50%, #08090b 0 7%, #ffef48 8% 12%, #ff35c4 13% 25%, #27e6ff 26% 30%, transparent 31%), radial-gradient(ellipse at 72% 50%, #08090b 0 7%, #53ff70 8% 12%, #7548ff 13% 25%, #ff35c4 26% 30%, transparent 31%), repeating-linear-gradient(135deg, #ff3bc422 0 6px, #25eaff22 7px 12px); }
+.cosmic-spores .preset-art { background-image: radial-gradient(circle at 18% 30%, #fff 0 2%, #ff42cb 3% 7%, transparent 8%), radial-gradient(circle at 67% 62%, #fff 0 2%, #52ff77 3% 8%, transparent 9%), radial-gradient(circle at 82% 24%, #fff24f 0 2%, #814cff 3% 7%, transparent 8%), repeating-radial-gradient(circle at 50% 50%, transparent 0 7px, #2deaff77 8px 9px, transparent 10px 15px); filter: drop-shadow(0 0 5px #8e4aff); }
 
 .controls { margin-top: 22px; padding-top: 20px; border-top: 1px solid #34363d; display: grid; gap: 24px; }
 .control-group { display: grid; gap: 16px; }
@@ -63,9 +100,15 @@ input[type='range'] { width: 100%; height: 4px; accent-color: #ff5a5f; cursor: p
 .help:hover .tooltip, .help:focus .tooltip, .preset:hover > .tooltip, .preset:focus > .tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
 .preset > .tooltip { left: 8px; right: 8px; top: calc(100% + 6px); width: auto; }
 .notice { margin: 24px 0 0; color: #ff8b8e; font-size: 12px; line-height: 1.5; }
+.select-row { display: grid; gap: 8px; font-size: 13px; }
+.select-row select, .file-button { width: 100%; padding: 9px 10px; border: 1px solid #4b4e57; border-radius: 6px; background: #17191e; color: #f4f2ef; }
+.file-button { text-align: center; cursor: pointer; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.mode-row { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.mode-row input { accent-color: #ff5a5f; }
 .privacy { margin: 20px 0 0; color: #64676f; font-size: 11px; }
 
-button:focus-visible, input:focus-visible { outline: 2px solid #ff7276; outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #ff7276; outline-offset: 3px; }
 
 @media (max-width: 780px) {
   .app-shell { height: auto; min-height: 100dvh; overflow: visible; grid-template-rows: auto 1fr; }
@@ -77,6 +120,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #ff7276; outline-
   aside { border-left: 0; border-top: 1px solid #25272d; overflow: visible; }
   .presets { grid-template-columns: 1fr 1fr; }
   .preset { grid-template-columns: 64px 1fr; }
+  .preset-summary { grid-template-columns: 64px minmax(0, 1fr); }
+  .active-mark { grid-column: 2; }
   .tooltip { width: min(280px, calc(100vw - 48px)); }
   .transport { left: 28px; right: 28px; grid-template-columns: 30px 80px 1fr; }
   .filename { display: none; }

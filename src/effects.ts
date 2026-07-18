@@ -1,4 +1,6 @@
-export type PresetId = 'neon' | 'ghost' | 'smoke' | 'vortex';
+import { PATTERN_PRESETS, type PatternId } from './pixelPoiPatterns';
+
+export type PresetId = PatternId | 'neon' | 'ghost' | 'smoke' | 'vortex';
 
 export type EffectControls = {
   trail: number;
@@ -24,7 +26,25 @@ export type EffectPreset = {
   defaults: EffectControls;
 };
 
+export const BLEND_MODES = [
+  { value: 'source-over', label: 'Normal (Solid)' },
+  { value: 'screen', label: 'Screen (Glow)' },
+  { value: 'lighter', label: 'Additive (Intense)' },
+  { value: 'color-dodge', label: 'Color Dodge' },
+] as const;
+
+export type BlendMode = typeof BLEND_MODES[number]['value'];
+export type CompositeControls = { invert: boolean; blendMode: BlendMode };
+export const DEFAULT_COMPOSITE_CONTROLS: CompositeControls = { invert: false, blendMode: 'screen' };
+
+export function effectLayerFilter(invert: boolean, filter = ''): string {
+  return `${invert ? 'invert(1)' : ''} ${filter}`.trim() || 'none';
+}
+
+const CLUB_DEFAULTS: EffectControls = { trail: 88, intensity: 100, glow: 35, sensitivity: 74, isolation: 78, blur: 0, expansion: 0, spin: 0, driftX: 0, driftY: 0, hue: 0, cycle: 0, saturation: 100, echo: 0 };
+
 export const PRESETS: EffectPreset[] = [
+  ...PATTERN_PRESETS.map(({ id, name, description }) => ({ id, name, description, defaults: { ...CLUB_DEFAULTS } })),
   {
     id: 'neon', name: 'Neon', description: 'A tight, bright trail with crisp edges and rapid color cycling.',
     defaults: { trail: 70, intensity: 100, glow: 20, sensitivity: 72, isolation: 78, blur: 0, expansion: 5, spin: 0, driftX: 0, driftY: 0, hue: 320, cycle: 70, saturation: 100, echo: 0 },
