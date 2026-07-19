@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { BLEND_MODES, DEFAULT_COMPOSITE_CONTROLS, PRESETS, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
 import { PATTERN_CONTROL_DEFAULTS, type PoiControls } from './pixelPoi';
-import { isPatternId, PATTERN_PRESETS, type PatternCategory } from './pixelPoiPatterns';
+import { isPatternId, PATTERN_PRESETS, type PatternCategory, type PatternId } from './pixelPoiPatterns';
 import { VideoStage } from './VideoStage';
 
 const INITIAL_PRESET = PRESETS[0];
 type PresetCategory = PatternCategory | 'classic';
+type ClubLookControls = PoiControls & { patternWidth: number; patternHeight: number };
+const withLookControls = (controls: PoiControls): ClubLookControls => ({ ...controls, patternWidth: 100, patternHeight: 100 });
 const PRESET_CATEGORIES: { id: PresetCategory; label: string; description: string }[] = [
-  { id: 'geometric', label: 'Geometric', description: '9 structured motion patterns' },
+  { id: 'geometric', label: 'Geometric', description: '10 structured motion patterns' },
   { id: 'psychedelic', label: 'Psychedelic', description: '6 fluid, high-color patterns' },
   { id: 'classic', label: 'Classic', description: '4 full-frame effects' },
 ];
@@ -29,14 +31,14 @@ const HELP: Record<keyof EffectControls, string> = {
   echo: 'Sets the delay between captured trail snapshots.',
 };
 
-const POI_HELP: Record<keyof PoiControls, string> = {
+const POI_HELP: Record<keyof ClubLookControls, string> = {
   lifetime: 'How long the trails and particles remain visible before fading.',
   brightness: 'Overall intensity of the glowing trail colors.',
   glow: 'Outer soft bloom size around the trails.',
   smoothing: 'Smoothes tracking jitter. Higher values reduce jitter but add input lag.',
   lostReset: 'Time before a lost club is completely untracked.',
   railSeparation: 'Distance between the parallel neon trails.',
-  crossbarFrequency: 'Deprecated: Spacing of horizontal ladder lines.',
+  crossbarFrequency: 'Spacing between captured trail snapshots.',
   ribbonWidth: 'Thickness of the continuous gradient ribbon.',
   cellDensity: 'Spacing of nodes inside the ribbon.',
   echoCount: 'Number of duplicated wireframe echo clones.',
@@ -51,6 +53,8 @@ const POI_HELP: Record<keyof PoiControls, string> = {
   tileSpacing: 'Spacing of mosaic nodes, blooms, or spore colonies.',
   shapeMix: 'Scales custom shape sizes or mixes geometries.',
   radialSymmetry: 'Number of mirror segments in the kaleidoscope or star points in the tunnel.',
+  patternWidth: 'Stretches or compresses the effect horizontally around each tracked club.',
+  patternHeight: 'Stretches or compresses the effect vertically around each tracked club.',
 };
 
 export function App() {
@@ -58,7 +62,7 @@ export function App() {
   const [preset, setPreset] = useState(INITIAL_PRESET);
   const [controls, setControls] = useState<EffectControls>(INITIAL_PRESET.defaults);
   const [composite, setComposite] = useState<CompositeControls>(DEFAULT_COMPOSITE_CONTROLS);
-  const [poiControls, setPoiControls] = useState(PATTERN_CONTROL_DEFAULTS['neon-rails']);
+  const [poiControls, setPoiControls] = useState<ClubLookControls>(withLookControls(PATTERN_CONTROL_DEFAULTS['neon-rails']));
   const [poiImageUrl, setPoiImageUrl] = useState('');
   const [resetKey, setResetKey] = useState(0);
   const [notice, setNotice] = useState('');
@@ -70,7 +74,7 @@ export function App() {
     setPreset(next);
     setActiveCategory(isPatternId(next.id) ? PATTERN_CATEGORY_BY_ID.get(next.id)! : 'classic');
     if (!isPatternId(next.id) || mode === 'defaults') setControls(next.defaults);
-    if (isPatternId(next.id) && mode === 'defaults') setPoiControls(PATTERN_CONTROL_DEFAULTS[next.id]);
+    if (isPatternId(next.id) && mode === 'defaults') setPoiControls(withLookControls(PATTERN_CONTROL_DEFAULTS[next.id]));
     setResetKey((key) => key + 1);
   }
 
@@ -78,7 +82,7 @@ export function App() {
     setControls((current) => ({ ...current, [key]: value }));
   }
 
-  function updatePoiControl(key: keyof PoiControls, value: number) {
+  function updatePoiControl(key: keyof ClubLookControls, value: number) {
     setPoiControls((current) => ({ ...current, [key]: value }));
   }
 
@@ -112,7 +116,7 @@ export function App() {
           <nav className="pattern-categories" aria-label="Pattern categories" role="tablist">
             {PRESET_CATEGORIES.map((category) => (
               <button key={category.id} id={`category-${category.id}`} role="tab" aria-selected={activeCategory === category.id} aria-controls="preset-panel" onClick={() => setActiveCategory(category.id)}>
-                {category.label}<span>{category.id === 'geometric' ? 9 : category.id === 'psychedelic' ? 6 : 4}</span>
+                {category.label}<span>{category.id === 'geometric' ? 10 : category.id === 'psychedelic' ? 6 : 4}</span>
               </button>
             ))}
           </nav>
@@ -146,7 +150,11 @@ export function App() {
                   <PoiRange name="brightness" label="Brightness" value={poiControls.brightness} min={0} max={100} suffix="%" onChange={updatePoiControl} />
                   <PoiRange name="glow" label="Glow" value={poiControls.glow} suffix="%" onChange={updatePoiControl} />
                 </ControlGroup>
-                <PatternControls preset={preset.id} controls={poiControls} update={updatePoiControl} loadImage={loadPoiImage} hasImage={Boolean(poiImageUrl)} />
+                <ControlGroup title="Pattern size">
+                  <PoiRange name="patternWidth" label="Width" value={poiControls.patternWidth} min={25} max={200} suffix="%" onChange={updatePoiControl} />
+                  <PoiRange name="patternHeight" label="Height" value={poiControls.patternHeight} min={25} max={200} suffix="%" onChange={updatePoiControl} />
+                </ControlGroup>
+                <PatternControls preset={preset.id as PatternId} controls={poiControls} update={updatePoiControl} loadImage={loadPoiImage} hasImage={Boolean(poiImageUrl)} />
               </>
             ) : (
               <>
@@ -194,24 +202,10 @@ export function App() {
 function PatternCard({ item, active, onActivate }: { item: EffectPreset; active: boolean; onActivate: (mode: 'current' | 'defaults') => void }) {
   const helpId = `preset-${item.id}-help`;
   return (
-    <section 
-      className={`preset-card ${item.id} ${active ? 'active' : ''}`} 
-      aria-label={item.name} 
-      aria-describedby={helpId}
-      style={{ cursor: active ? 'default' : 'pointer' }}
-      onClick={(e) => {
-        if (!active) {
-          onActivate('defaults');
-        }
-      }}
-    >
-      <div className="preset-summary">
-        <span className="preset-art" aria-hidden="true" />
-        <strong>{item.name}</strong>
-        {active && <span className="active-mark">Active</span>}
-      </div>
+    <section className={`preset-card ${item.id} ${active ? 'active' : ''}`} aria-label={item.name} aria-describedby={helpId} style={{ cursor: active ? 'default' : 'pointer' }} onClick={() => { if (!active) onActivate('defaults'); }}>
+      <div className="preset-summary"><span className="preset-art" aria-hidden="true" /><strong>{item.name}</strong>{active && <span className="active-mark">Active</span>}</div>
       <small className="preset-description" id={helpId}>{item.description}</small>
-      <div className="preset-actions" onClick={(e) => e.stopPropagation()}>
+      <div className="preset-actions" onClick={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => onActivate('current')} aria-label={`Use ${item.name} with current settings`}>Use current</button>
         <button type="button" className="use-defaults" onClick={() => onActivate('defaults')} aria-label={`Use ${item.name} with default settings`}>Use defaults</button>
       </div>
@@ -219,25 +213,26 @@ function PatternCard({ item, active, onActivate }: { item: EffectPreset; active:
   );
 }
 
-function PatternControls({ preset, controls, update, loadImage, hasImage }: { preset: string; controls: PoiControls; update: (key: keyof PoiControls, value: number) => void; loadImage: (file?: File) => void; hasImage: boolean }) {
-  if (preset === 'neon-rails') return <ControlGroup title="Rail geometry"><PoiRange name="railSeparation" label="Rail separation" value={controls.railSeparation} min={-30} max={250} suffix="%" onChange={update} /><PoiRange name="crossbarFrequency" label="Crossbar spacing" value={controls.crossbarFrequency} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
+function PatternControls({ preset, controls, update, loadImage, hasImage }: { preset: PatternId; controls: ClubLookControls; update: (key: keyof ClubLookControls, value: number) => void; loadImage: (file?: File) => void; hasImage: boolean }) {
+  if (preset === 'neon-rails') return <ControlGroup title="Ghost trail"><PoiRange name="railSeparation" label="Pulse amount" value={controls.railSeparation} min={0} max={250} suffix="%" onChange={update} /><PoiRange name="crossbarFrequency" label="Snapshot spacing" value={controls.crossbarFrequency} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'prism-ribbon') return <ControlGroup title="Ribbon geometry"><PoiRange name="ribbonWidth" label="Ribbon width" value={controls.ribbonWidth} min={-30} max={250} suffix="%" onChange={update} /><PoiRange name="cellDensity" label="Cell spacing" value={controls.cellDensity} min={1} max={120} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'chromatic-echoes') return <ControlGroup title="Echo geometry"><PoiRange name="echoCount" label="Echo count" value={controls.echoCount} min={1} max={30} onChange={update} /><PoiRange name="echoSpacing" label="Echo spacing" value={controls.echoSpacing} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'electric-comets') return <ControlGroup title="Particle geometry"><PoiRange name="branching" label="Branching" value={controls.branching} min={0} max={100} suffix="%" onChange={update} /><PoiRange name="turbulence" label="Turbulence" value={controls.turbulence} min={0} max={100} suffix="%" onChange={update} /></ControlGroup>;
   if (preset === 'kinetic-lattice') return <ControlGroup title="Lattice geometry"><PoiRange name="latticeDensity" label="Pose spacing" value={controls.latticeDensity} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'psychedelic-serpent') return <ControlGroup title="Serpent geometry"><PoiRange name="strandCount" label="Strand count" value={controls.strandCount} min={1} max={15} onChange={update} /><PoiRange name="waveAmplitude" label="Wave amplitude" value={controls.waveAmplitude} min={0} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'apex-shatter') return <ControlGroup title="Burst geometry"><PoiRange name="shardCount" label="Shard count" value={controls.shardCount} min={1} max={50} onChange={update} /><PoiRange name="shardSpread" label="Shard spread" value={controls.shardSpread} min={0} max={250} suffix="%" onChange={update} /></ControlGroup>;
-  if (preset === 'pixel-mosaic') return <ControlGroup title="Mosaic geometry"><PoiRange name="tileSpacing" label="Tile spacing" value={controls.tileSpacing} min={1} max={150} suffix=" px" onChange={update} /><PoiRange name="shapeMix" label="Shape mix" value={controls.shapeMix} min={0} max={100} suffix="%" onChange={update} /></ControlGroup>;
+  if (preset === 'pixel-mosaic') return <ControlGroup title="Club echo"><PoiRange name="tileSpacing" label="Snapshot spacing" value={controls.tileSpacing} min={4} max={80} suffix=" px" onChange={update} /><PoiRange name="shapeMix" label="Echo opacity" value={controls.shapeMix} min={10} max={100} suffix="%" onChange={update} /></ControlGroup>;
   if (preset === 'radial-pov') return <ControlGroup title="Radial POV"><PoiRange name="radialSymmetry" label="Symmetry" value={controls.radialSymmetry} min={1} max={32} onChange={update} /><label className="file-button">{hasImage ? 'Replace POV image' : 'Upload POV image'}<input type="file" accept="image/*" onChange={(event) => loadImage(event.target.files?.[0])} /></label></ControlGroup>;
   if (preset === 'acid-blooms') return <ControlGroup title="Acid blooms"><PoiRange name="radialSymmetry" label="Petal count" value={controls.radialSymmetry} min={1} max={32} onChange={update} /><PoiRange name="tileSpacing" label="Bloom spacing" value={controls.tileSpacing} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'liquid-portal') return <ControlGroup title="Liquid portals"><PoiRange name="echoSpacing" label="Portal spacing" value={controls.echoSpacing} min={1} max={150} suffix=" px" onChange={update} /><PoiRange name="waveAmplitude" label="Ripple amount" value={controls.waveAmplitude} min={0} max={150} onChange={update} /></ControlGroup>;
   if (preset === 'kaleido-tunnel') return <ControlGroup title="Kaleido tunnel"><PoiRange name="radialSymmetry" label="Star points" value={controls.radialSymmetry} min={1} max={32} onChange={update} /><PoiRange name="latticeDensity" label="Wheel spacing" value={controls.latticeDensity} min={1} max={150} suffix=" px" onChange={update} /></ControlGroup>;
   if (preset === 'melting-rainbow') return <ControlGroup title="Melting rainbow"><PoiRange name="strandCount" label="Color bands" value={controls.strandCount} min={1} max={20} onChange={update} /><PoiRange name="waveAmplitude" label="Melt amount" value={controls.waveAmplitude} min={0} max={150} onChange={update} /></ControlGroup>;
   if (preset === 'hypno-eyes') return <ControlGroup title="Hypno eyes"><PoiRange name="echoSpacing" label="Eye spacing" value={controls.echoSpacing} min={1} max={150} suffix=" px" onChange={update} /><PoiRange name="shapeMix" label="Eye size" value={controls.shapeMix} min={0} max={100} suffix="%" onChange={update} /></ControlGroup>;
+  if (preset === 'led-club-show') return null;
   return <ControlGroup title="Cosmic spores"><PoiRange name="tileSpacing" label="Colony spacing" value={controls.tileSpacing} min={1} max={150} suffix=" px" onChange={update} /><PoiRange name="branching" label="Orbit density" value={controls.branching} min={0} max={100} suffix="%" onChange={update} /><PoiRange name="waveAmplitude" label="Orbit radius" value={controls.waveAmplitude} min={0} max={150} onChange={update} /></ControlGroup>;
 }
 
-function PoiRange({ name, label, value, onChange, min = 0, max = 100, step = 1, suffix = '' }: { name: keyof PoiControls; label: string; value: number; onChange: (key: keyof PoiControls, value: number) => void; min?: number; max?: number; step?: number; suffix?: string }) {
+function PoiRange({ name, label, value, onChange, min = 0, max = 100, step = 1, suffix = '' }: { name: keyof ClubLookControls; label: string; value: number; onChange: (key: keyof ClubLookControls, value: number) => void; min?: number; max?: number; step?: number; suffix?: string }) {
   const id = `poi-${name}`;
   return <div className="range-row"><div className="range-label"><span><label htmlFor={id}>{label}</label><Help label={label} text={POI_HELP[name]} /></span><output htmlFor={id}>{value}{suffix}</output></div><input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(name, Number(event.target.value))} /></div>;
 }
