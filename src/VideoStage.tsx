@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { drawAudioClubVisualizer } from './audioClubVisualizer';
 import { effectLayerFilter, extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
 import { drawGhostPulseLayer } from './ghostPulse';
+import { drawLedClubShow } from './ledClubShow';
 import { detectClubs, drawPoiLayer, updateTracks, type PoiControls, type PoiTrack } from './pixelPoi';
 import { isPatternId } from './pixelPoiPatterns';
 
@@ -213,6 +214,8 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         poiCtx.scale(displayScale, poiCanvas.height / trackCanvas.height);
         if (activePreset.id === 'neon-rails') {
           drawGhostPulseLayer(poiCtx, tracks, now, poi);
+        } else if (activePreset.id === 'led-club-show') {
+          drawLedClubShow(poiCtx, tracks, now, poi);
         } else {
           drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
         }
@@ -251,10 +254,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       trailCtx.translate(trailCanvas.width / 2, trailCanvas.height / 2);
       trailCtx.rotate(transform.rotation);
       trailCtx.scale(transform.zoom, transform.zoom);
-      trailCtx.translate(
-        -trailCanvas.width / 2 + transform.dx,
-        -trailCanvas.height / 2 + transform.dy,
-      );
+      trailCtx.translate(-trailCanvas.width / 2 + transform.dx, -trailCanvas.height / 2 + transform.dy);
       trailCtx.drawImage(transformed, 0, 0);
       trailCtx.restore();
 
