@@ -1,3 +1,4 @@
+import './clubEchoTrail';
 import { CLUB_EFFECTS, DEFAULT_POI_CONTROLS, PATTERN_CONTROL_DEFAULTS, type PoiControls, type PoiTrack } from './pixelPoi';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -96,7 +97,6 @@ export function drawLedClubShow(
         const minimum = Math.min(red, green, blue);
         const saturation = maximum === 0 ? 0 : (maximum - minimum) / maximum;
 
-        // Preserve only visible club texture. Dark, flat background pixels remain untouched.
         const texture = clamp((luminance - 0.075) * 2.8 + saturation * 0.45, 0, 1);
         if (texture < 0.12) continue;
 
