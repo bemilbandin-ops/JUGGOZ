@@ -2,6 +2,7 @@ import './clubEchoTrail';
 import { CLUB_EFFECTS, DEFAULT_POI_CONTROLS, PATTERN_CONTROL_DEFAULTS, type PoiControls, type PoiTrack } from './pixelPoi';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+type SizedPoiControls = PoiControls & { patternWidth?: number; patternHeight?: number };
 
 PATTERN_CONTROL_DEFAULTS['led-club-show'] = {
   ...DEFAULT_POI_CONTROLS,
@@ -62,6 +63,9 @@ export function drawLedClubShow(
   const averageScale = Math.max(0.001, (scaleX + scaleY) / 2);
   const chasePosition = ((now * 0.00055) % 1 + 1) % 1;
   const brightness = controls.brightness / 100;
+  const sized = controls as SizedPoiControls;
+  const patternWidth = clamp((sized.patternWidth ?? 100) / 100, 0.25, 2);
+  const patternHeight = clamp((sized.patternHeight ?? 100) / 100, 0.25, 2);
 
   for (const track of tracks) {
     if (track.state === 'lost' || track.confidence < 0.16) continue;
@@ -69,9 +73,9 @@ export function drawLedClubShow(
     const centerX = track.center.x * transform.a + track.center.y * transform.c + transform.e;
     const centerY = track.center.x * transform.b + track.center.y * transform.d + transform.f;
     const angle = track.angle + Math.atan2(transform.b, transform.a);
-    const length = clamp(track.length * averageScale, 24, 420);
+    const length = clamp(track.length * averageScale * patternWidth, 24, 520);
     const halfLength = length / 2;
-    const radius = clamp(length * 0.12, 6, 34);
+    const radius = clamp(track.length * averageScale * 0.12 * patternHeight, 3, 54);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const padding = radius + 4;
@@ -96,7 +100,6 @@ export function drawLedClubShow(
         const maximum = Math.max(red, green, blue);
         const minimum = Math.min(red, green, blue);
         const saturation = maximum === 0 ? 0 : (maximum - minimum) / maximum;
-
         const texture = clamp((luminance - 0.075) * 2.8 + saturation * 0.45, 0, 1);
         if (texture < 0.12) continue;
 
