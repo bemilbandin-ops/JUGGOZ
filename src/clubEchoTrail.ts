@@ -16,6 +16,8 @@ type EchoState = {
   lastY: number;
 };
 
+type SizedPoiControls = PoiControls & { patternWidth?: number; patternHeight?: number };
+
 const states = new WeakMap<PoiTrack, EchoState>();
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -74,6 +76,9 @@ function renderEchoTrail(
   const source = document.querySelector<HTMLCanvasElement>('.stage > canvas.is-ready');
   if (!source || !source.width || !source.height) return;
 
+  const sized = controls as SizedPoiControls;
+  const widthScale = clamp((sized.patternWidth ?? 100) / 100, 0.25, 2);
+  const heightScale = clamp((sized.patternHeight ?? 100) / 100, 0.25, 2);
   const state = stateFor(track);
   const lifetime = clamp(controls.lifetime, 450, 2600);
   state.stamps = state.stamps.filter((stamp) => now - stamp.born < lifetime);
@@ -103,9 +108,7 @@ function renderEchoTrail(
   }
 
   const brightness = controls.brightness / 100;
-  const lostFade = track.state === 'lost'
-    ? clamp(1 - (now - track.lastSeen) / Math.min(420, controls.lostReset), 0, 1)
-    : 1;
+  const lostFade = track.state === 'lost' ? clamp(1 - (now - track.lastSeen) / Math.min(420, controls.lostReset), 0, 1) : 1;
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
@@ -118,14 +121,14 @@ function renderEchoTrail(
     const life = clamp(1 - age / lifetime, 0, 1);
     const smoothFade = life * life * (3 - 2 * life);
     const depth = (index + 1) / Math.max(1, state.stamps.length);
-    const alpha = smoothFade * lostFade * brightness * (0.28 + depth * 0.38);
+    const alpha = smoothFade * lostFade * brightness * (0.28 + depth * 0.38) * clamp(controls.shapeMix / 75, 0.2, 1.35);
     const settle = 1 + (1 - life) * 0.018;
     const renderScale = settle / Math.max(0.001, stamp.scale);
 
     ctx.save();
     ctx.translate(stamp.x, stamp.y);
     ctx.rotate(stamp.angle);
-    ctx.scale(renderScale, renderScale);
+    ctx.scale(renderScale * widthScale, renderScale * heightScale);
     ctx.globalAlpha = alpha;
     ctx.drawImage(stamp.image, -stamp.image.width / 2, -stamp.image.height / 2);
     ctx.restore();
