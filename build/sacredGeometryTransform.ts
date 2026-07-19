@@ -170,15 +170,26 @@ export function sacredGeometryTransform(): Plugin {
     name: 'sacred-geometry-transform',
     enforce: 'pre',
     transform(code, id) {
-      if (!id.endsWith('/src/pixelPoi.ts') && !id.endsWith('\\src\\pixelPoi.ts')) return null;
+      const cleanId = id.split('?', 1)[0].replace(/\\/g, '/');
+      if (!cleanId.endsWith('/src/pixelPoi.ts')) return null;
 
-      let next = code;
-      next = next.replace(oldDefaults, newDefaults);
-      next = next.replace(oldRenderer, newRenderer);
-      next = next.replace(oldMapping, newMapping);
+      const hasDefaults = code.includes(oldDefaults);
+      const hasRenderer = code.includes(oldRenderer);
+      const hasMapping = code.includes(oldMapping);
 
-      if (next === code || next.includes('function renderShatter(') || next.includes('update: emitApex')) {
-        throw new Error('Sacred geometry transform could not replace the Apex Shatter implementation.');
+      if (!hasDefaults || !hasRenderer || !hasMapping) {
+        throw new Error(
+          `Sacred geometry transform source mismatch: defaults=${hasDefaults}, renderer=${hasRenderer}, mapping=${hasMapping}`,
+        );
+      }
+
+      const next = code
+        .replace(oldDefaults, newDefaults)
+        .replace(oldRenderer, newRenderer)
+        .replace(oldMapping, newMapping);
+
+      if (next.includes('function renderShatter(') || next.includes('update: emitApex')) {
+        throw new Error('Sacred geometry transform left Apex Shatter code active.');
       }
 
       return { code: next, map: null };
