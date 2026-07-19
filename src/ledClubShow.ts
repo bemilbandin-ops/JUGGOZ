@@ -1,6 +1,18 @@
-import type { PoiControls, PoiTrack } from './pixelPoi';
+import { CLUB_EFFECTS, DEFAULT_POI_CONTROLS, PATTERN_CONTROL_DEFAULTS, type PoiControls, type PoiTrack } from './pixelPoi';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+// Register this standalone renderer with the shared tracking system. The preset is
+// drawn separately in VideoStage, but updateTracks still needs defaults and a safe
+// transient-effect entry for switching between patterns.
+PATTERN_CONTROL_DEFAULTS['led-club-show'] = {
+  ...DEFAULT_POI_CONTROLS,
+  lifetime: 900,
+  brightness: 92,
+  glow: 48,
+  smoothing: 72,
+};
+CLUB_EFFECTS['led-club-show'] = CLUB_EFFECTS['neon-rails'];
 
 function roundedClubPath(length: number, width: number) {
   const half = length / 2;
