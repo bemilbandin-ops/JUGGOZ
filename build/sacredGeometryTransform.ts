@@ -1,8 +1,11 @@
 import type { Plugin } from 'vite';
 
 const oldDefaults = "  'apex-shatter': tuned({ lifetime: 1250, brightness: 90, glow: 25, smoothing: 62, shardCount: 12, shardSpread: 68 }),";
-const transformedDefaults = "  'apex-shatter': tuned({ lifetime: 1400, brightness: 84, glow: 34, smoothing: 78, shardCount: 9, shardSpread: 42, radialSymmetry: 6, waveAmplitude: 14 }),";
-const alreadyTransformedDefaults = "  'apex-shatter': tuned({ lifetime: 1050, brightness: 82, glow: 30, smoothing: 74, shardCount: 8, shardSpread: 46, radialSymmetry: 6, waveAmplitude: 12 }),";
+const transformedDefaults = "  'apex-shatter': tuned({ lifetime: 1050, brightness: 80, glow: 22, smoothing: 78, shardCount: 7, shardSpread: 36, radialSymmetry: 6, waveAmplitude: 12 }),";
+const previousDefaults = [
+  "  'apex-shatter': tuned({ lifetime: 1050, brightness: 82, glow: 30, smoothing: 74, shardCount: 8, shardSpread: 46, radialSymmetry: 6, waveAmplitude: 12 }),",
+  "  'apex-shatter': tuned({ lifetime: 1400, brightness: 84, glow: 34, smoothing: 78, shardCount: 9, shardSpread: 42, radialSymmetry: 6, waveAmplitude: 14 }),",
+];
 
 const oldRendererStart = 'function emitApex(';
 const oldRendererEnd = '\nfunction renderMosaic(';
@@ -20,7 +23,7 @@ const renderer = `function polygonPath(ctx: CanvasRenderingContext2D, radius: nu
   ctx.closePath();
 }
 
-function drawSacredRosette(
+function drawMainRosette(
   ctx: CanvasRenderingContext2D,
   center: Point,
   radius: number,
@@ -29,7 +32,6 @@ function drawSacredRosette(
   hue: number,
   alpha: number,
   displayScale: number,
-  detail = 1,
 ) {
   if (radius <= 0.5 || alpha <= 0.01) return;
 
@@ -38,63 +40,89 @@ function drawSacredRosette(
   ctx.rotate(rotation);
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  ctx.globalCompositeOperation = 'source-over';
 
-  const line = Math.max(0.55, 1.05 * detail) / displayScale;
-  const glow = (4.5 + detail * 2) / displayScale;
-  const secondaryHue = (hue + 64) % 360;
-  const tertiaryHue = (hue + 204) % 360;
+  const line = 1 / displayScale;
+  const secondaryHue = (hue + 66) % 360;
+  const tertiaryHue = (hue + 205) % 360;
 
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.lineWidth = line;
-  ctx.shadowBlur = glow;
-
-  // Outer ritual circle.
-  ctx.strokeStyle = \`hsla(\${hue}, 95%, 70%, \${alpha * 0.72})\`;
-  ctx.shadowColor = \`hsla(\${hue}, 100%, 56%, \${alpha})\`;
+  // One restrained glow pass for the complete silhouette.
+  ctx.lineWidth = 2.6 / displayScale;
+  ctx.strokeStyle = \`hsla(\${hue}, 100%, 58%, \${alpha * 0.16})\`;
+  ctx.shadowColor = \`hsla(\${hue}, 100%, 55%, \${alpha * 0.55})\`;
+  ctx.shadowBlur = 4 / displayScale;
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, TAU);
   ctx.stroke();
 
-  // Flower-of-life petal layer.
+  // Disable shadows for all detailed geometry; this is the main performance win.
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = line;
+  ctx.strokeStyle = \`hsla(\${hue}, 94%, 72%, \${alpha * 0.76})\`;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, TAU);
+  ctx.stroke();
+
+  // Batch all flower-of-life circles into one path and one stroke.
   const petalRadius = radius * 0.5;
-  ctx.strokeStyle = \`hsla(\${secondaryHue}, 92%, 68%, \${alpha * 0.62})\`;
-  ctx.shadowColor = \`hsla(\${secondaryHue}, 100%, 54%, \${alpha * 0.9})\`;
+  ctx.strokeStyle = \`hsla(\${secondaryHue}, 94%, 70%, \${alpha * 0.62})\`;
+  ctx.beginPath();
   for (let index = 0; index < petals; index++) {
     const angle = index / petals * TAU;
     const x = Math.cos(angle) * petalRadius;
     const y = Math.sin(angle) * petalRadius;
-    ctx.beginPath();
+    ctx.moveTo(x + petalRadius, y);
     ctx.arc(x, y, petalRadius, 0, TAU);
-    ctx.stroke();
   }
+  ctx.stroke();
 
-  // Counter-rotating nested polygons produce an actual mandala silhouette.
-  ctx.strokeStyle = \`hsla(\${tertiaryHue}, 96%, 74%, \${alpha * 0.78})\`;
-  ctx.shadowColor = \`hsla(\${tertiaryHue}, 100%, 58%, \${alpha})\`;
+  ctx.strokeStyle = \`hsla(\${tertiaryHue}, 96%, 76%, \${alpha * 0.72})\`;
   polygonPath(ctx, radius * 0.82, petals, Math.PI / petals);
   ctx.stroke();
 
-  ctx.rotate(-rotation * 1.85);
-  ctx.strokeStyle = \`hsla(\${hue}, 90%, 78%, \${alpha * 0.54})\`;
-  polygonPath(ctx, radius * 0.56, petals, 0);
+  ctx.rotate(-rotation * 1.65);
+  ctx.strokeStyle = \`hsla(\${hue}, 90%, 80%, \${alpha * 0.48})\`;
+  polygonPath(ctx, radius * 0.54, petals, 0);
   ctx.stroke();
 
-  // Seed-of-life core and radial spokes.
-  ctx.strokeStyle = \`hsla(\${secondaryHue}, 100%, 82%, \${alpha * 0.72})\`;
-  ctx.lineWidth = Math.max(0.45, 0.72 * detail) / displayScale;
+  // Batch spokes into one path and one stroke.
+  ctx.strokeStyle = \`hsla(\${secondaryHue}, 100%, 84%, \${alpha * 0.58})\`;
+  ctx.lineWidth = 0.72 / displayScale;
+  ctx.beginPath();
   for (let index = 0; index < petals; index++) {
     const angle = index / petals * TAU;
-    ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(angle) * radius * 0.82, Math.sin(angle) * radius * 0.82);
-    ctx.stroke();
+    ctx.lineTo(Math.cos(angle) * radius * 0.8, Math.sin(angle) * radius * 0.8);
   }
+  ctx.stroke();
 
-  ctx.fillStyle = \`hsla(\${tertiaryHue}, 100%, 88%, \${alpha * 0.9})\`;
-  ctx.shadowBlur = 7 / displayScale;
+  ctx.fillStyle = \`hsla(\${tertiaryHue}, 100%, 88%, \${alpha * 0.88})\`;
   ctx.beginPath();
-  ctx.arc(0, 0, Math.max(0.9, radius * 0.07), 0, TAU);
+  ctx.arc(0, 0, Math.max(0.8, radius * 0.065), 0, TAU);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawEndpointSigil(
+  ctx: CanvasRenderingContext2D,
+  center: Point,
+  radius: number,
+  rotation: number,
+  hue: number,
+  alpha: number,
+  displayScale: number,
+) {
+  if (radius <= 0.5 || alpha <= 0.01) return;
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(rotation);
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 0.85 / displayScale;
+  ctx.strokeStyle = \`hsla(\${hue}, 96%, 74%, \${alpha})\`;
+  polygonPath(ctx, radius, 6, 0);
+  ctx.stroke();
+  polygonPath(ctx, radius * 0.56, 3, Math.PI / 6);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -110,88 +138,63 @@ function renderForestMandala(
   if (!latest) return;
 
   const alpha = poseFade(latest, track, now, controls);
-  if (alpha <= 0.035) return;
+  if (alpha <= 0.04) return;
 
-  const petals = clamp(Math.round(controls.radialSymmetry || 6), 5, 10);
+  const petals = clamp(Math.round(controls.radialSymmetry || 6), 5, 8);
   const speed = Math.hypot(latest.velocity.x, latest.velocity.y);
-  const pulse = 0.94 + Math.sin(now * 0.0032 + track.id * 1.37) * 0.08;
-  const speedBoost = clamp(speed * 2.4, 0, 0.22);
-  const baseRadius = clamp(latest.length * (0.22 + speedBoost) * pulse, 13, 27) / displayScale;
-  const rotation = latest.angle + now * 0.00042 + latest.angularVelocity * 120;
-  const hue = (104 + track.id * 41 + now * 0.008) % 360;
+  const pulse = 0.96 + Math.sin(now * 0.0028 + track.id * 1.37) * 0.06;
+  const speedBoost = clamp(speed * 1.5, 0, 0.14);
+  const radius = clamp(latest.length * (0.19 + speedBoost) * pulse, 11, 23) / displayScale;
+  const rotation = latest.angle + now * 0.00034 + latest.angularVelocity * 90;
+  const hue = (112 + track.id * 37 + now * 0.006) % 360;
 
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
 
-  // Main persistent mandala locked to the club center.
-  drawSacredRosette(
+  drawMainRosette(
     ctx,
     latest.center,
-    baseRadius,
+    radius,
     petals,
     rotation,
     hue,
-    Math.min(0.82, alpha * 0.9),
+    Math.min(0.76, alpha * 0.82),
     displayScale,
-    1.15,
   );
 
-  // Endpoint satellites orbit with the club instead of spawning in world space.
-  const satelliteRadius = baseRadius * 0.44;
-  drawSacredRosette(
-    ctx,
-    latest.first,
-    satelliteRadius,
-    petals,
-    -rotation * 1.35,
-    (hue + 82) % 360,
-    Math.min(0.55, alpha * 0.58),
-    displayScale,
-    0.72,
-  );
-  drawSacredRosette(
-    ctx,
-    latest.second,
-    satelliteRadius,
-    petals,
-    rotation * 1.35,
-    (hue + 214) % 360,
-    Math.min(0.55, alpha * 0.58),
-    displayScale,
-    0.72,
-  );
+  // Lightweight endpoint sigils replace two complete secondary rosettes.
+  const endpointRadius = radius * 0.34;
+  drawEndpointSigil(ctx, latest.first, endpointRadius, -rotation, (hue + 78) % 360, alpha * 0.44, displayScale);
+  drawEndpointSigil(ctx, latest.second, endpointRadius, rotation, (hue + 210) % 360, alpha * 0.44, displayScale);
 
-  // Club-aligned diamond lattice makes the effect read as one coherent object.
-  ctx.strokeStyle = \`hsla(\${(hue + 38) % 360}, 96%, 74%, \${Math.min(0.62, alpha * 0.68)})\`;
-  ctx.shadowColor = \`hsla(\${(hue + 38) % 360}, 100%, 58%, \${alpha * 0.7})\`;
-  ctx.shadowBlur = 5 / displayScale;
-  ctx.lineWidth = 1.05 / displayScale;
+  // One coherent club-aligned lattice, no shadow.
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = \`hsla(\${(hue + 38) % 360}, 96%, 76%, \${Math.min(0.5, alpha * 0.52)})\`;
+  ctx.lineWidth = 0.9 / displayScale;
   ctx.beginPath();
   ctx.moveTo(latest.first.x, latest.first.y);
-  ctx.lineTo(latest.center.x, latest.center.y - baseRadius * 0.42);
+  ctx.lineTo(latest.center.x, latest.center.y - radius * 0.38);
   ctx.lineTo(latest.second.x, latest.second.y);
-  ctx.lineTo(latest.center.x, latest.center.y + baseRadius * 0.42);
+  ctx.lineTo(latest.center.x, latest.center.y + radius * 0.38);
   ctx.closePath();
   ctx.stroke();
 
-  // A short coherent echo: only two old rosettes, widely spaced and strongly faded.
-  const echoes = spacedPoses(track, now, controls, 34, 3);
-  for (let index = 1; index < echoes.length; index++) {
-    const item = echoes[index];
-    const echoAlpha = poseFade(item, track, now, controls) * (index === 1 ? 0.22 : 0.1);
-    if (echoAlpha <= 0.02) continue;
-    const echoRadius = clamp(item.length * 0.13, 7, 14) / displayScale;
-    drawSacredRosette(
-      ctx,
-      item.center,
-      echoRadius,
-      petals,
-      rotation - index * 0.44,
-      (hue + index * 34) % 360,
-      echoAlpha,
-      displayScale,
-      0.55,
-    );
+  // One cheap historical glyph rather than two full rosettes.
+  const echo = spacedPoses(track, now, controls, 42, 2)[1];
+  if (echo) {
+    const echoAlpha = poseFade(echo, track, now, controls) * 0.16;
+    if (echoAlpha > 0.02) {
+      const echoRadius = clamp(echo.length * 0.1, 5, 10) / displayScale;
+      drawEndpointSigil(
+        ctx,
+        echo.center,
+        echoRadius,
+        rotation - 0.42,
+        (hue + 42) % 360,
+        echoAlpha,
+        displayScale,
+      );
+    }
   }
 
   ctx.restore();
@@ -213,12 +216,16 @@ export function sacredGeometryTransform(): Plugin {
       if (next.includes(oldDefaults)) {
         next = next.replace(oldDefaults, transformedDefaults);
         defaultsReplaced = true;
-      } else if (next.includes(alreadyTransformedDefaults)) {
-        next = next.replace(alreadyTransformedDefaults, transformedDefaults);
-        defaultsReplaced = true;
-      } else if (next.includes(transformedDefaults)) {
-        defaultsReplaced = true;
+      } else {
+        for (const previous of previousDefaults) {
+          if (next.includes(previous)) {
+            next = next.replace(previous, transformedDefaults);
+            defaultsReplaced = true;
+            break;
+          }
+        }
       }
+      if (next.includes(transformedDefaults)) defaultsReplaced = true;
 
       const rendererStart = next.indexOf(oldRendererStart);
       const rendererEnd = next.indexOf(oldRendererEnd, rendererStart);
@@ -226,7 +233,12 @@ export function sacredGeometryTransform(): Plugin {
         next = next.slice(0, rendererStart) + renderer + next.slice(rendererEnd);
         rendererReplaced = true;
       } else if (next.includes('function renderForestMandala(')) {
-        const existingStart = next.indexOf('function polygonPath(');
+        const starts = [
+          next.indexOf('function polygonPath('),
+          next.indexOf('function drawMainRosette('),
+          next.indexOf('function drawSacredRosette('),
+        ].filter((value) => value >= 0);
+        const existingStart = starts.length ? Math.min(...starts) : -1;
         const existingEnd = next.indexOf(oldRendererEnd, existingStart);
         if (existingStart >= 0 && existingEnd > existingStart) {
           next = next.slice(0, existingStart) + renderer + next.slice(existingEnd);
