@@ -106,18 +106,25 @@ export const PATTERN_CONTROL_DEFAULTS: Record<PatternId, PoiControls> = {
   'apex-shatter': tuned({ lifetime: 1250, brightness: 90, glow: 25, smoothing: 62, shardCount: 12, shardSpread: 68 }),
   'pixel-mosaic': tuned({ lifetime: 1500, brightness: 86, glow: 20, smoothing: 70, tileSpacing: 23, shapeMix: 72 }),
   'radial-pov': tuned({ lifetime: 1300, brightness: 80, glow: 36, smoothing: 70, radialSymmetry: 8 }),
-  'acid-blooms': tuned({ lifetime: 2100, brightness: 94, glow: 52, smoothing: 74, radialSymmetry: 7, tileSpacing: 38 }),
-  'liquid-portal': tuned({ lifetime: 1900, brightness: 88, glow: 48, smoothing: 80, echoSpacing: 34, waveAmplitude: 22 }),
-  'kaleido-tunnel': tuned({ lifetime: 1800, brightness: 96, glow: 42, smoothing: 72, radialSymmetry: 9, latticeDensity: 32 }),
-  'melting-rainbow': tuned({ lifetime: 2300, brightness: 92, glow: 38, smoothing: 82, strandCount: 5, waveAmplitude: 26 }),
-  'hypno-eyes': tuned({ lifetime: 2000, brightness: 90, glow: 46, smoothing: 76, echoSpacing: 42, shapeMix: 82 }),
-  'cosmic-spores': tuned({ lifetime: 2400, brightness: 86, glow: 58, smoothing: 78, tileSpacing: 30, branching: 72, waveAmplitude: 20 }),
+  'acid-blooms': tuned({ lifetime: 1100, brightness: 74, glow: 22, smoothing: 74, radialSymmetry: 6, tileSpacing: 28 }),
+  'liquid-portal': tuned({ lifetime: 800, brightness: 72, glow: 20, smoothing: 78, echoSpacing: 16, waveAmplitude: 10 }),
+  'kaleido-tunnel': tuned({ lifetime: 700, brightness: 68, glow: 16, smoothing: 72, radialSymmetry: 6, latticeDensity: 24 }),
+  'melting-rainbow': tuned({ lifetime: 1250, brightness: 72, glow: 20, smoothing: 80, strandCount: 3, waveAmplitude: 12 }),
+  'hypno-eyes': tuned({ lifetime: 750, brightness: 70, glow: 18, smoothing: 76, echoSpacing: 28, shapeMix: 60 }),
+  'cosmic-spores': tuned({ lifetime: 700, brightness: 72, glow: 18, smoothing: 76, tileSpacing: 22, branching: 42, waveAmplitude: 8 }),
 };
 
 const TAU = Math.PI * 2;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const distance = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
+function effectScale(item: PoiPose, controls: PoiControls) {
+  const normalizedLength = clamp(item.length, 32, 92);
+  return normalizedLength / 72;
+}
+function localRadius(item: PoiPose, controls: PoiControls, baseRadius: number, maxRadius = 28) {
+  return Math.min(maxRadius, baseRadius * effectScale(item, controls));
+}
 const seeded = (value: number) => {
   const result = Math.sin(value * 12.9898) * 43758.5453;
   return result - Math.floor(result);
@@ -350,7 +357,7 @@ export function updateTracks(tracks: PoiTrack[], detections: Detection[], now: n
 
 type EffectRenderer = {
   update: (track: PoiTrack, added: PoiPose[], now: number, controls: PoiControls) => void;
-  render: (ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null) => void;
+  render: (ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) => void;
   reset: (track: PoiTrack) => void;
 };
 
@@ -672,63 +679,86 @@ function renderRadial(ctx: CanvasRenderingContext2D, track: PoiTrack, now: numbe
   }
 }
 
-function renderCrystallineConstellation(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const poses = spacedPoses(track, now, controls, Math.max(10, controls.tileSpacing));
-  if (poses.length < 3) return;
+function renderCrystallineConstellation(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
+  const poses = spacedPoses(track, now, controls, Math.max(10, controls.tileSpacing)).slice(0, 14);
+  if (poses.length < 2) return;
   
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over';
   
-  const maxDist = 65;
+  const maxDist = 34; // in tracking pixels
   
+  // Find two closest neighbors for each node
+  const neighbors: number[][] = [];
+  for (let i = 0; i < poses.length; i++) {
+    const list: { index: number; dist: number }[] = [];
+    for (let j = 0; j < poses.length; j++) {
+      if (i === j) continue;
+      const d = distance(poses[i].center, poses[j].center);
+      list.push({ index: j, dist: d });
+    }
+    list.sort((a, b) => a.dist - b.dist);
+    neighbors.push(list.slice(0, 2).map(item => item.index));
+  }
+  
+  // Connect each node to its two closest neighbors if distance < 34
+  ctx.lineWidth = 1 / displayScale;
   for (let i = 0; i < poses.length; i++) {
     const alphaI = poseFade(poses[i], track, now, controls);
     if (alphaI <= 0.05) continue;
     
-    for (let j = i + 1; j < Math.min(poses.length, i + 4); j++) {
-      const alphaJ = poseFade(poses[j], track, now, controls);
+    const nbs = neighbors[i];
+    for (const nb of nbs) {
+      const dist = distance(poses[i].center, poses[nb].center);
+      if (dist < maxDist) {
+        const alphaNb = poseFade(poses[nb], track, now, controls);
+        const avgAlpha = (alphaI + alphaNb) / 2;
+        const hue = i % 2 === 0 ? 275 : 185; // Violet-cyan palette
+        
+        ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${avgAlpha * 0.75})`;
+        ctx.beginPath();
+        ctx.moveTo(poses[i].center.x, poses[i].center.y);
+        ctx.lineTo(poses[nb].center.x, poses[nb].center.y);
+        ctx.stroke();
+      }
+    }
+    
+    // Create a triangle only every third node
+    if (i % 3 === 0 && nbs.length >= 2) {
+      const nb1 = nbs[0];
+      const nb2 = nbs[1];
+      const d1 = distance(poses[i].center, poses[nb1].center);
+      const d2 = distance(poses[i].center, poses[nb2].center);
+      const d3 = distance(poses[nb1].center, poses[nb2].center);
       
-      for (let k = j + 1; k < Math.min(poses.length, i + 5); k++) {
-        const alphaK = poseFade(poses[k], track, now, controls);
+      if (d1 < maxDist && d2 < maxDist && d3 < maxDist) {
+        const alpha1 = poseFade(poses[nb1], track, now, controls);
+        const alpha2 = poseFade(poses[nb2], track, now, controls);
+        const avgAlpha = (alphaI + alpha1 + alpha2) / 3;
+        const hue = i % 2 === 0 ? 275 : 185;
         
-        const pA = poses[i].center;
-        const pB = poses[j].center;
-        const pC = poses[k].center;
-        
-        const dAB = distance(pA, pB);
-        const dBC = distance(pB, pC);
-        const dCA = distance(pC, pA);
-        
-        if (dAB < maxDist && dBC < maxDist && dCA < maxDist) {
-          const avgAlpha = (alphaI + alphaJ + alphaK) / 3;
-          const hue = (poses[i].travel * 1.6 + now * 0.06 + track.id * 45) % 360;
-          
-          ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${avgAlpha * 0.16})`;
-          ctx.beginPath();
-          ctx.moveTo(pA.x, pA.y);
-          ctx.lineTo(pB.x, pB.y);
-          ctx.lineTo(pC.x, pC.y);
-          ctx.closePath();
-          ctx.fill();
-          
-          ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${avgAlpha * 0.75})`;
-          ctx.lineWidth = 0.8;
-          ctx.stroke();
-        }
+        ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${avgAlpha * 0.04})`;
+        ctx.beginPath();
+        ctx.moveTo(poses[i].center.x, poses[i].center.y);
+        ctx.lineTo(poses[nb1].center.x, poses[nb1].center.y);
+        ctx.lineTo(poses[nb2].center.x, poses[nb2].center.y);
+        ctx.closePath();
+        ctx.fill();
       }
     }
   }
   
-  poses.forEach((p) => {
+  poses.forEach((p, idx) => {
     const alpha = poseFade(p, track, now, controls);
     if (alpha <= 0.05) return;
-    const hue = (p.travel * 1.6 + now * 0.06 + track.id * 45) % 360;
+    const hue = idx % 2 === 0 ? 275 : 185;
+    const r = localRadius(p, controls, 2.5) / displayScale;
     
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = `hsla(${hue}, 100%, 60%, 1.0)`;
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 4 / displayScale;
     ctx.beginPath();
-    ctx.arc(p.center.x, p.center.y, 2, 0, Math.PI * 2);
+    ctx.arc(p.center.x, p.center.y, r, 0, Math.PI * 2);
     ctx.fill();
   });
   
@@ -736,11 +766,12 @@ function renderCrystallineConstellation(ctx: CanvasRenderingContext2D, track: Po
 }
 
 function updateVectorSwarm(track: PoiTrack, added: PoiPose[], now: number, controls: PoiControls) {
-  const density = Math.max(1, Math.round(controls.echoSpacing / 6));
   added.forEach((pose) => {
-    for (let i = 0; i < density; i++) {
+    // Emit once every 12–18 pixels of travel (we choose 15)
+    if (Math.floor(pose.travel / 15) > Math.floor((pose.travel - 3) / 15)) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = (0.5 + Math.random() * 1.5) * (controls.waveAmplitude / 20);
+      // Velocity in pixels per second, multiplying by age/1000
+      const speed = (30 + Math.random() * 50) * (controls.waveAmplitude / 10);
       track.particles.push({
         origin: { x: pose.center.x, y: pose.center.y },
         velocity: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
@@ -751,47 +782,66 @@ function updateVectorSwarm(track: PoiTrack, added: PoiPose[], now: number, contr
     }
   });
   
-  track.particles = track.particles.filter((p) => now - p.born < controls.lifetime);
+  // Cap at 50 particles per track
+  track.particles = track.particles.filter((p) => now - p.born < controls.lifetime).slice(-50);
 }
 
-function renderVectorSwarm(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+function renderVectorSwarm(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over'; // Use source-over instead of lighter
   
   track.particles.forEach((p) => {
     const age = now - p.born;
     const progress = age / controls.lifetime;
     if (progress >= 1.0) return;
     
+    // Position at current age (swirl radius reduced to 5.5)
     const t = age * 0.005;
-    const swirlX = Math.sin(t + p.seed * Math.PI * 2) * 15;
-    const swirlY = Math.cos(t * 1.5 + p.seed * Math.PI * 2) * 15;
+    const swirlX = Math.sin(t + p.seed * Math.PI * 2) * 5.5;
+    const swirlY = Math.cos(t * 1.5 + p.seed * Math.PI * 2) * 5.5;
     
-    const px = p.origin.x + p.velocity.x * age + swirlX;
-    const py = p.origin.y + p.velocity.y * age + swirlY;
+    // Containment force pulling back to track center
+    const px = mix(p.origin.x + p.velocity.x * (age / 1000) + swirlX, track.center.x, progress * 0.6);
+    const py = mix(p.origin.y + p.velocity.y * (age / 1000) + swirlY, track.center.y, progress * 0.6);
+    
+    // Position at previous age for curved streak
+    const prevAge = Math.max(0, age - 30);
+    const prevProgress = prevAge / controls.lifetime;
+    const prevT = prevAge * 0.005;
+    const prevSwirlX = Math.sin(prevT + p.seed * Math.PI * 2) * 5.5;
+    const prevSwirlY = Math.cos(prevT * 1.5 + p.seed * Math.PI * 2) * 5.5;
+    const prevPx = mix(p.origin.x + p.velocity.x * (prevAge / 1000) + prevSwirlX, track.center.x, prevProgress * 0.6);
+    const prevPy = mix(p.origin.y + p.velocity.y * (prevAge / 1000) + prevSwirlY, track.center.y, prevProgress * 0.6);
     
     const alpha = poseFade({ timestamp: p.born } as any, track, now, controls) * (1 - progress);
-    const size = Math.max(0.5, 2.5 * (1 - progress));
-    const hue = (140 + p.seed * 360 + now * 0.02) % 360;
+    const baseSize = localRadius({ length: track.length } as PoiPose, controls, 3.5);
+    const size = Math.max(0.5, baseSize * (1 - progress)) / displayScale;
     
-    ctx.fillStyle = `hsla(${hue}, 100%, 70%, ${alpha * 0.9})`;
+    // Palette: Cyan (190) and Violet (270)
+    const hue = p.seed < 0.5 ? 190 : 270;
+    
+    ctx.strokeStyle = `hsla(${hue}, 100%, 70%, ${alpha * 0.9})`;
     ctx.shadowColor = `hsla(${hue}, 100%, 60%, ${alpha * 0.9})`;
     ctx.shadowBlur = size * 2.0;
+    ctx.lineWidth = size;
+    ctx.lineCap = 'round';
     
     ctx.beginPath();
-    ctx.arc(px, py, size, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(prevPx, prevPy);
+    ctx.lineTo(px, py);
+    ctx.stroke();
   });
   
   ctx.restore();
 }
 
-function renderVolumetricFanRays(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const spacing = Math.max(15, controls.latticeDensity);
-  const poses = spacedPoses(track, now, controls, spacing);
+function renderVolumetricFanRays(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
+  // Render rays only from the latest one or two poses
+  const poses = track.history.slice(-2).reverse();
+  if (poses.length === 0) return;
   
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over'; // Avoid additive compositing
   
   poses.forEach((item, index) => {
     const alpha = poseFade(item, track, now, controls);
@@ -799,36 +849,48 @@ function renderVolumetricFanRays(ctx: CanvasRenderingContext2D, track: PoiTrack,
     
     const age = now - item.timestamp;
     const progress = age / controls.lifetime;
-    const maxLen = item.length * 0.45 * (1 - progress);
+    
+    // Cap ray length to 18–30 tracking pixels (e.g. 24)
+    const maxLen = localRadius(item, controls, 24, 30);
     if (maxLen < 4) return;
     
-    const rayCount = 3;
-    const baseAngle = now * 0.005 + index * 0.3;
-    const spread = Math.PI / 10;
-    const hue = (240 + item.travel * 1.5 + now * 0.08) % 360;
+    // Orient the fan using the club angle or movement direction
+    const speed = Math.hypot(item.velocity.x, item.velocity.y);
+    const baseAngle = speed > 0.02 ? Math.atan2(item.velocity.y, item.velocity.x) : item.angle;
+    
+    // Use 5–7 narrow lines (we choose 7)
+    const lineCount = 7;
+    // Narrow angular spread, about 25–40 degrees total (we choose 35 degrees = 0.61 radians)
+    const spread = 35 * Math.PI / 180;
+    
+    // Palette: Electric Blue (210) and Hot Pink (320)
+    const hue = index % 2 === 0 ? 210 : 320;
     
     ctx.save();
     ctx.translate(item.center.x, item.center.y);
-    ctx.globalAlpha = alpha * (1 - progress);
     
-    for (let r = 0; r < rayCount; r++) {
-      const angle = baseAngle + r * (Math.PI * 2 / rayCount);
+    // Fade older pose relative to latest
+    const poseWeight = index === 0 ? 1.0 : 0.5;
+    ctx.globalAlpha = alpha * (1 - progress) * poseWeight;
+    
+    for (let r = 0; r < lineCount; r++) {
+      const angleOffset = ((r / (lineCount - 1)) - 0.5) * spread;
+      const angle = baseAngle + angleOffset;
+      
+      // Fade in the direction opposite motion (rays further from center fade out)
+      const motionFade = Math.cos(angleOffset * (Math.PI / spread));
       
       ctx.save();
       ctx.rotate(angle);
       
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.arc(0, 0, maxLen, -spread / 2, spread / 2);
-      ctx.closePath();
+      ctx.lineTo(maxLen, 0);
       
-      const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, maxLen);
-      grad.addColorStop(0, `hsla(${hue}, 100%, 75%, 0.65)`);
-      grad.addColorStop(0.3, `hsla(${hue}, 100%, 60%, 0.3)`);
-      grad.addColorStop(1, 'transparent');
+      ctx.strokeStyle = `hsla(${hue}, 100%, 65%, ${motionFade})`;
+      ctx.lineWidth = (1.5 / displayScale) * motionFade;
+      ctx.stroke();
       
-      ctx.fillStyle = grad;
-      ctx.fill();
       ctx.restore();
     }
     ctx.restore();
@@ -836,46 +898,90 @@ function renderVolumetricFanRays(ctx: CanvasRenderingContext2D, track: PoiTrack,
   ctx.restore();
 }
 
-function renderLavaPlasma(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const spacing = Math.max(10, controls.strandCount * 2);
+function renderLavaPlasma(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
+  // Sample poses at 22 pixel spacing
+  const spacing = 22;
   const poses = spacedPoses(track, now, controls, spacing);
   if (poses.length < 2) return;
   
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over'; // Use source-over instead of lighter
   
-  poses.forEach((item) => {
+  const lavaPalette = [0, 25, 50];
+  
+  // First, draw the thick tapered path underneath the blobs
+  for (let i = 1; i < poses.length; i++) {
+    const a = poses[i - 1];
+    const b = poses[i];
+    if (a.segment !== b.segment) continue;
+    
+    const alphaA = poseFade(a, track, now, controls);
+    const alphaB = poseFade(b, track, now, controls);
+    const avgAlpha = (alphaA + alphaB) / 2;
+    if (avgAlpha <= 0.05) continue;
+    
+    const progressA = (now - a.timestamp) / controls.lifetime;
+    const progressB = (now - b.timestamp) / controls.lifetime;
+    
+    // Older blobs shrink faster using Math.pow(1 - progress, 2)
+    const scaleA = Math.pow(1 - clamp(progressA, 0, 1), 2.0);
+    const scaleB = Math.pow(1 - clamp(progressB, 0, 1), 2.0);
+    
+    // Radius multiplier 0.10, capped at 20 (via localRadius)
+    const baseRadiusA = localRadius(a, controls, a.length * 0.10, 20);
+    const baseRadiusB = localRadius(b, controls, b.length * 0.10, 20);
+    
+    const sizeA = baseRadiusA * scaleA;
+    const sizeB = baseRadiusB * scaleB;
+    
+    const hue = lavaPalette[i % lavaPalette.length];
+    
+    ctx.strokeStyle = `hsla(${hue}, 100%, 55%, ${avgAlpha * 0.4})`;
+    ctx.lineWidth = (sizeA + sizeB) / displayScale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.center.x, a.center.y);
+    ctx.lineTo(b.center.x, b.center.y);
+    ctx.stroke();
+  }
+  
+  // Then, draw the blobs on top
+  poses.forEach((item, index) => {
     const alpha = poseFade(item, track, now, controls);
     if (alpha <= 0.05) return;
     
     const age = now - item.timestamp;
     const progress = age / controls.lifetime;
     
-    const wiggle = Math.sin(item.travel * 0.04 + now * 0.003) * controls.waveAmplitude * 0.15;
-    const size = Math.max(4, item.length * 0.22 * (1 - progress) + wiggle);
+    // Older blobs shrink faster
+    const scale = Math.pow(1 - clamp(progress, 0, 1), 2.0);
+    const baseRadius = localRadius(item, controls, item.length * 0.10, 20);
+    const size = baseRadius * scale;
+    if (size < 1) return;
     
-    const hue = (item.travel * 1.5 + now * 0.07) % 360;
+    const hue = lavaPalette[index % lavaPalette.length];
     
-    const grad = ctx.createRadialGradient(item.center.x, item.center.y, 1, item.center.x, item.center.y, size);
-    grad.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.95)`);
-    grad.addColorStop(0.5, `hsla(${(hue + 25) % 360}, 100%, 55%, 0.4)`);
+    const displaySize = size / displayScale;
+    const grad = ctx.createRadialGradient(item.center.x, item.center.y, 1 / displayScale, item.center.x, item.center.y, displaySize);
+    grad.addColorStop(0, `hsla(${hue}, 100%, 70%, ${alpha})`);
+    grad.addColorStop(0.5, `hsla(${(hue + 20) % 360}, 100%, 55%, ${alpha * 0.4})`);
     grad.addColorStop(1, 'transparent');
     
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(item.center.x, item.center.y, size, 0, Math.PI * 2);
+    ctx.arc(item.center.x, item.center.y, displaySize, 0, Math.PI * 2);
     ctx.fill();
   });
   
   ctx.restore();
 }
 
-function renderAtomicShell(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const spacing = Math.max(15, controls.echoSpacing);
-  const poses = spacedPoses(track, now, controls, spacing);
+function renderAtomicShell(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
+  // Draw shell only around the latest pose and 2 older ghost shells (maximum 3 shells)
+  const poses = spacedPoses(track, now, controls, 20, 3);
   
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over'; // Use source-over instead of lighter
   
   poses.forEach((item, index) => {
     const alpha = poseFade(item, track, now, controls);
@@ -883,23 +989,43 @@ function renderAtomicShell(ctx: CanvasRenderingContext2D, track: PoiTrack, now: 
     
     const age = now - item.timestamp;
     const progress = age / controls.lifetime;
-    const radius = Math.max(5, item.length * 0.32 * (1 - progress));
-    const hue = (180 + item.travel * 1.5 + now * 0.08) % 360;
+    
+    // Cap radius to 16–24 tracking pixels (e.g. 18)
+    const radius = localRadius(item, controls, 18, 20);
     
     ctx.save();
     ctx.translate(item.center.x, item.center.y);
-    ctx.globalAlpha = alpha * (1 - progress);
     
-    const shellCount = 3;
-    for (let s = 0; s < shellCount; s++) {
+    // Keep opacity under approximately 0.45, older ghost shells have lower opacity
+    const ghostWeight = index === 0 ? 1.0 : (index === 1 ? 0.5 : 0.25);
+    ctx.globalAlpha = alpha * (1 - progress) * 0.40 * ghostWeight;
+    
+    // Draw one small nucleus at the center
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = `rgba(255, 255, 255, 0.8)`;
+    ctx.shadowBlur = 4 / displayScale;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.5 / displayScale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Use two rings instead of three
+    const ringCount = 2;
+    for (let s = 0; s < ringCount; s++) {
       ctx.save();
-      ctx.rotate(s * Math.PI / shellCount + now * 0.002);
+      
+      // Rotate using actual club angle and angular velocity
+      const baseRot = item.angle + s * Math.PI / ringCount;
+      const spin = item.angularVelocity * age * 0.5;
+      ctx.rotate(baseRot + spin);
       ctx.scale(1.0, 0.28);
       
-      ctx.strokeStyle = `hsla(${(hue + s * 40) % 360}, 100%, 65%, 0.85)`;
-      ctx.lineWidth = 1.5;
-      ctx.shadowColor = `hsla(${(hue + s * 40) % 360}, 100%, 60%, 0.8)`;
-      ctx.shadowBlur = radius * 0.3;
+      // Two-color palette: Cyan (180) and Magenta (320)
+      const hue = s % 2 === 0 ? 180 : 320;
+      
+      ctx.strokeStyle = `hsla(${hue}, 100%, 65%, 0.85)`;
+      ctx.lineWidth = 1.5 / displayScale;
+      ctx.shadowColor = `hsla(${hue}, 100%, 60%, 0.8)`;
+      ctx.shadowBlur = (radius * 0.3) / displayScale;
       
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -912,45 +1038,64 @@ function renderAtomicShell(ctx: CanvasRenderingContext2D, track: PoiTrack, now: 
   ctx.restore();
 }
 
-function renderDigitalGlitch(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+function renderDigitalGlitch(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null, displayScale: number) {
   const spacing = Math.max(15, controls.tileSpacing);
   const poses = spacedPoses(track, now, controls, spacing);
   
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = 'source-over'; // Use source-over instead of lighter
   
   poses.forEach((item, index) => {
+    // Randomly show only 30–50% of sampled poses each frame (we choose 40%)
+    if (Math.random() > 0.40) return;
+    
     const alpha = poseFade(item, track, now, controls);
     if (alpha <= 0.05) return;
     
     const age = now - item.timestamp;
     const progress = age / controls.lifetime;
     
-    const strandLength = Math.max(2, Math.round(controls.branching / 12));
-    const hue = (300 + item.travel * 1.5 + now * 0.07) % 360;
+    // Cap strand length at 3–5 blocks (we choose 4)
+    const strandLength = 4;
     
     ctx.save();
     ctx.globalAlpha = alpha * (1 - progress);
     
-    const speed = 0.12 * controls.waveAmplitude;
-    const fallDist = age * speed;
+    // Correct the Digital Glitch time-unit bug and keep fall distance under 25-40 (we choose 30) tracking pixels
+    const speed = controls.waveAmplitude * 1.6;
+    const fallDist = Math.min(30, (age / 1000) * speed);
     
     for (let s = 0; s < strandLength; s++) {
-      const yOffset = fallDist + s * 6.0;
+      const yOffset = fallDist + s * (6.0 / displayScale);
       const blockAlpha = 1.0 - (s / strandLength);
       
-      const glitchX = (seeded(item.travel * 10 + s + Math.floor(now / 80)) - 0.5) * 6.0;
+      const glitchX = (seeded(item.travel * 10 + s + Math.floor(now / 80)) - 0.5) * (6.0 / displayScale);
+      
+      // Restrained magenta/cyan palette
+      const hue = s % 2 === 0 ? 320 : 180;
       
       ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${blockAlpha * 0.9})`;
       ctx.shadowColor = `hsla(${hue}, 100%, 60%, 1.0)`;
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 4 / displayScale;
       
+      const w = 3.0 / displayScale;
+      const h = 4.0 / displayScale;
       ctx.fillRect(
-        item.center.x + glitchX - 1.5,
-        item.center.y + yOffset - 3,
-        3,
-        4
+        item.center.x + glitchX - w / 2,
+        item.center.y + yOffset - h / 2,
+        w,
+        h
       );
+      
+      // Add short horizontal scanline fragments
+      if (s === 0) {
+        ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${blockAlpha * 0.7})`;
+        ctx.lineWidth = 1.0 / displayScale;
+        ctx.beginPath();
+        ctx.moveTo(item.center.x - 10 / displayScale, item.center.y + yOffset);
+        ctx.lineTo(item.center.x + 10 / displayScale, item.center.y + yOffset);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   });
@@ -1069,7 +1214,7 @@ export const CLUB_EFFECTS: Record<PatternId, EffectRenderer> = {
   'cosmic-spores': { update: noUpdate, render: renderDigitalGlitch, reset: resetTransient },
 };
 
-export function drawPoiLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls, patternId: PatternId, image: ImageData | null) {
+export function drawPoiLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls, patternId: PatternId, image: ImageData | null, displayScale: number) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineJoin = 'round';
@@ -1080,7 +1225,7 @@ export function drawPoiLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], 
   
   // 2. Draw individual club trajectories
   for (const track of tracks) {
-    CLUB_EFFECTS[patternId].render(ctx, track, now, controls, image);
+    CLUB_EFFECTS[patternId].render(ctx, track, now, controls, image, displayScale);
   }
   
   ctx.restore();

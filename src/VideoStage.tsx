@@ -151,8 +151,9 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         poiCtx.setTransform(1, 0, 0, 1, 0, 0);
         poiCtx.clearRect(0, 0, poiCanvas.width, poiCanvas.height);
         poiCtx.save();
-        poiCtx.scale(poiCanvas.width / trackCanvas.width, poiCanvas.height / trackCanvas.height);
-        drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null);
+        const displayScale = poiCanvas.width / trackCanvas.width;
+        poiCtx.scale(displayScale, poiCanvas.height / trackCanvas.height);
+        drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
         poiCtx.restore();
         let patternLayer = poiCanvas;
         ctx.globalCompositeOperation = compositing.blendMode;
