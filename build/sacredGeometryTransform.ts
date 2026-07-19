@@ -243,7 +243,7 @@ export function sacredGeometryTransform(): Plugin {
 
       if (!defaultsReplaced || !rendererReplaced || !mappingReplaced) {
         throw new Error(
-          \`Forest Mandala transform failed: defaults=\${defaultsReplaced}, renderer=\${rendererReplaced}, mapping=\${mappingReplaced}\`,
+          `Forest Mandala transform failed: defaults=${defaultsReplaced}, renderer=${rendererReplaced}, mapping=${mappingReplaced}`,
         );
       }
 
