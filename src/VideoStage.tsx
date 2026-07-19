@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { drawAudioClubVisualizer } from './audioClubVisualizer';
 import { effectLayerFilter, extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
 import { drawGhostPulseLayer } from './ghostPulse';
 import { detectClubs, drawPoiLayer, updateTracks, type PoiControls, type PoiTrack } from './pixelPoi';
@@ -19,13 +20,21 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const audioFileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const spectrumRef = useRef(new Uint8Array(0));
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [time, setTime] = useState(0);
   const [fileName, setFileName] = useState('');
+  const [audioName, setAudioName] = useState('');
   const [startingCamera, setStartingCamera] = useState(false);
   const effectRef = useRef({ preset, controls, composite });
   const poiSettingsRef = useRef(poiControls);
@@ -63,14 +72,57 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     const video = videoRef.current;
+    const audio = audioRef.current;
     if (video) {
       video.pause();
       video.srcObject = null;
       video.removeAttribute('src');
       video.load();
     }
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
     return () => streamRef.current?.getTracks().forEach((track) => track.stop());
   }, [source]);
+
+  useEffect(() => () => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    void audioContextRef.current?.close();
+  }, []);
+
+  function ensureAudioAnalyser() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    const audioContext = audioContextRef.current;
+    if (!audioSourceRef.current) {
+      audioSourceRef.current = audioContext.createMediaElementSource(audio);
+      analyserRef.current = audioContext.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      analyserRef.current.smoothingTimeConstant = 0.82;
+      audioSourceRef.current.connect(analyserRef.current);
+      analyserRef.current.connect(audioContext.destination);
+      spectrumRef.current = new Uint8Array(analyserRef.current.frequencyBinCount);
+    }
+    if (audioContext.state === 'suspended') void audioContext.resume();
+  }
+
+  async function syncAudioToVideo(force = false) {
+    const audio = audioRef.current;
+    const video = videoRef.current;
+    if (!audio || !audioName || !video) return;
+    ensureAudioAnalyser();
+    if (source === 'upload' && Number.isFinite(video.currentTime) && (force || Math.abs(audio.currentTime - video.currentTime) > 0.18)) {
+      audio.currentTime = Math.min(video.currentTime, Number.isFinite(audio.duration) ? Math.max(0, audio.duration - 0.02) : video.currentTime);
+    }
+    if (!video.paused && audio.paused) await audio.play().catch(() => undefined);
+    if (video.paused && !audio.paused) audio.pause();
+  }
 
   useEffect(() => {
     const video = videoRef.current;
@@ -120,6 +172,11 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       frame = requestAnimationFrame(render);
       if (video.paused || video.ended || video.readyState < 2) return;
 
+      const analyser = analyserRef.current;
+      if (analyser && spectrumRef.current.length === analyser.frequencyBinCount) {
+        analyser.getByteFrequencyData(spectrumRef.current);
+      }
+
       const frameMs = now - lastFrameAt;
       lastFrameAt = now;
       slowFrames = frameMs > 27 ? slowFrames + 1 : Math.max(0, slowFrames - 1);
@@ -159,6 +216,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         } else {
           drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
         }
+        drawAudioClubVisualizer(poiCtx, tracks, spectrumRef.current, now);
         poiCtx.restore();
         const patternLayer = poiCanvas;
         ctx.globalCompositeOperation = compositing.blendMode;
@@ -178,6 +236,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         if (source === 'upload' && now - lastUiUpdate > 200) {
           lastUiUpdate = now;
           setTime(video.currentTime);
+          void syncAudioToVideo();
         }
         return;
       }
@@ -230,11 +289,12 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       if (source === 'upload' && now - lastUiUpdate > 200) {
         lastUiUpdate = now;
         setTime(video.currentTime);
+        void syncAudioToVideo();
       }
     };
     frame = requestAnimationFrame(render);
     return () => cancelAnimationFrame(frame);
-  }, [ready, resetKey, source]);
+  }, [ready, resetKey, source, audioName]);
 
   async function startCamera() {
     if (startingCamera) return;
@@ -245,6 +305,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       const video = videoRef.current!;
       video.srcObject = stream;
       await video.play();
+      await syncAudioToVideo(true);
       setReady(true);
       setPlaying(true);
     } catch (error) {
@@ -268,18 +329,53 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       setReady(true);
       setFileName(file.name);
       await video.play();
+      await syncAudioToVideo(true);
       setPlaying(true);
     };
   }
 
+  async function loadAudioTrack(file?: File) {
+    if (!file?.type.startsWith('audio/')) return;
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = URL.createObjectURL(file);
+    const audio = audioRef.current!;
+    audio.src = audioUrlRef.current;
+    audio.loop = true;
+    audio.load();
+    setAudioName(file.name);
+    audio.onloadedmetadata = async () => {
+      ensureAudioAnalyser();
+      await syncAudioToVideo(true);
+    };
+  }
+
+  function removeAudioTrack() {
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) {
+      audio.removeAttribute('src');
+      audio.load();
+    }
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    spectrumRef.current.fill(0);
+    setAudioName('');
+  }
+
   function togglePlayback() {
     const video = videoRef.current!;
-    if (video.paused) void video.play(); else video.pause();
+    if (video.paused) {
+      void video.play().then(() => syncAudioToVideo(true));
+    } else {
+      video.pause();
+      audioRef.current?.pause();
+    }
   }
 
   return (
     <section className="stage" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); loadFile(event.dataTransfer.files[0]); }}>
-      <video ref={videoRef} muted playsInline hidden onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />
+      <video ref={videoRef} muted playsInline hidden onPlay={() => { setPlaying(true); void syncAudioToVideo(true); }} onPause={() => { setPlaying(false); audioRef.current?.pause(); }} />
+      <audio ref={audioRef} hidden />
       <canvas ref={canvasRef} className={ready ? 'is-ready' : ''} aria-label="Processed video output" />
       {!ready && (
         <button className="empty-stage" disabled={startingCamera} onClick={() => source === 'upload' ? fileRef.current?.click() : void startCamera()}>
@@ -289,11 +385,18 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         </button>
       )}
       <input ref={fileRef} type="file" accept="video/*" hidden onChange={(event) => loadFile(event.target.files?.[0])} />
+      <input ref={audioFileRef} type="file" accept="audio/*" hidden onChange={(event) => loadAudioTrack(event.target.files?.[0])} />
+      {ready && (
+        <div className="audio-track-control">
+          <button type="button" onClick={() => audioFileRef.current?.click()}>{audioName ? 'Replace track' : 'Add audio track'}</button>
+          {audioName && <><span title={audioName}>{audioName}</span><button type="button" className="remove-track" onClick={removeAudioTrack}>Remove</button></>}
+        </div>
+      )}
       {source === 'upload' && ready && (
         <div className="transport">
           <button onClick={togglePlayback} aria-label={playing ? 'Pause video' : 'Play video'}>{playing ? 'Ⅱ' : '▶'}</button>
           <span>{formatTime(time)} / {formatTime(duration)}</span>
-          <input aria-label="Video position" type="range" min="0" max={duration || 0} step="0.01" value={time} onChange={(event) => { videoRef.current!.currentTime = Number(event.target.value); setTime(Number(event.target.value)); }} />
+          <input aria-label="Video position" type="range" min="0" max={duration || 0} step="0.01" value={time} onChange={(event) => { videoRef.current!.currentTime = Number(event.target.value); setTime(Number(event.target.value)); void syncAudioToVideo(true); }} />
           <span className="filename">{fileName}</span>
         </div>
       )}
@@ -304,4 +407,10 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
 function formatTime(seconds: number) {
   const value = Number.isFinite(seconds) ? seconds : 0;
   return `${Math.floor(value / 60)}:${Math.floor(value % 60).toString().padStart(2, '0')}`;
+}
+
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
 }
