@@ -31,7 +31,7 @@ export const PATTERN_PRESETS: PatternPreset[] = [
   { id: 'chromatic-echoes', name: 'Chromatic Echoes', category: 'geometric', geometry: 'discrete pose stamps', description: 'Separated club silhouettes preserve the real rotation of the throw.' },
   { id: 'electric-comets', name: 'Electric Comets', category: 'geometric', geometry: 'endpoint particles', description: 'Independent electrical branches shed from both moving endpoints.' },
   { id: 'kinetic-lattice', name: 'Kinetic Lattice', category: 'geometric', geometry: 'temporal polygon mesh', description: 'Sequential poses form a fading chain of triangles and diamonds.' },
-  { id: 'psychedelic-serpent', name: 'Psychedelic Serpent', category: 'geometric', geometry: 'multi-strand path waveform', description: 'Flowing wave strands coil around the club’s translated trajectory.' },
+  { id: 'psychedelic-serpent', name: 'Pulse Afterimage', category: 'geometric', geometry: 'chromatic multi-exposure trail', description: 'Layered club silhouettes fade through cyan, magenta, and white with a soft pulse and endpoint shimmer.' },
   { id: 'apex-shatter', name: 'Forest Mandala', category: 'geometric', geometry: 'club-anchored sacred geometry', description: 'Breathing flower-of-life mandalas bloom from the club center and endpoints with a compact geometric aftertrail.' },
   { id: 'pixel-mosaic', name: 'Pixel Mosaic', category: 'geometric', geometry: 'path-oriented tiles', description: 'Spaced diamonds, chevrons, hexagons, and squares mark the flight path.' },
   { id: 'radial-pov', name: 'Radial POV', category: 'geometric', geometry: 'local radial spokes', description: 'The original center-based rotational effect, retained as an option.' },
