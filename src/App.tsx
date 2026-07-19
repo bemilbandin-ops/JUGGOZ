@@ -11,7 +11,7 @@ const withLookControls = (controls: PoiControls): ClubLookControls => ({ ...cont
 const PRESET_CATEGORIES: { id: PresetCategory; label: string; description: string }[] = [
   { id: 'geometric', label: 'Geometric', description: '10 structured motion patterns' },
   { id: 'psychedelic', label: 'Psychedelic', description: '6 fluid, high-color patterns' },
-  { id: 'classic', label: 'Classic', description: '4 full-frame effects' },
+  { id: 'classic', label: 'Classic', description: '8 full-frame effects' },
 ];
 const PATTERN_CATEGORY_BY_ID = new Map(PATTERN_PRESETS.map(({ id, category }) => [id, category]));
 const HELP: Record<keyof EffectControls, string> = {
@@ -53,8 +53,8 @@ const POI_HELP: Record<keyof ClubLookControls, string> = {
   tileSpacing: 'Spacing of mosaic nodes, blooms, or spore colonies.',
   shapeMix: 'Scales custom shape sizes or mixes geometries.',
   radialSymmetry: 'Number of mirror segments in the kaleidoscope or star points in the tunnel.',
-  patternWidth: 'Stretches or compresses the effect horizontally around each tracked club.',
-  patternHeight: 'Stretches or compresses the effect vertically around each tracked club.',
+  patternWidth: 'Stretches or compresses the visible effect horizontally.',
+  patternHeight: 'Stretches or compresses the visible effect vertically.',
 };
 
 export function App() {
@@ -74,7 +74,10 @@ export function App() {
     setPreset(next);
     setActiveCategory(isPatternId(next.id) ? PATTERN_CATEGORY_BY_ID.get(next.id)! : 'classic');
     if (!isPatternId(next.id) || mode === 'defaults') setControls(next.defaults);
-    if (isPatternId(next.id) && mode === 'defaults') setPoiControls(withLookControls(PATTERN_CONTROL_DEFAULTS[next.id]));
+    if (isPatternId(next.id) && mode === 'defaults') {
+      const { patternWidth, patternHeight } = poiControls;
+      setPoiControls({ ...withLookControls(PATTERN_CONTROL_DEFAULTS[next.id]), patternWidth, patternHeight });
+    }
     setResetKey((key) => key + 1);
   }
 
@@ -88,6 +91,7 @@ export function App() {
 
   function resetAll() {
     choosePreset(INITIAL_PRESET);
+    setPoiControls((current) => ({ ...withLookControls(PATTERN_CONTROL_DEFAULTS['neon-rails']), patternWidth: current.patternWidth, patternHeight: current.patternHeight }));
     setComposite(DEFAULT_COMPOSITE_CONTROLS);
   }
 
@@ -116,7 +120,7 @@ export function App() {
           <nav className="pattern-categories" aria-label="Pattern categories" role="tablist">
             {PRESET_CATEGORIES.map((category) => (
               <button key={category.id} id={`category-${category.id}`} role="tab" aria-selected={activeCategory === category.id} aria-controls="preset-panel" onClick={() => setActiveCategory(category.id)}>
-                {category.label}<span>{category.id === 'geometric' ? 10 : category.id === 'psychedelic' ? 6 : 4}</span>
+                {category.label}<span>{category.id === 'geometric' ? 10 : category.id === 'psychedelic' ? 6 : 8}</span>
               </button>
             ))}
           </nav>
@@ -143,16 +147,17 @@ export function App() {
               {clubPreset && <PoiRange name="smoothing" label="Pose smoothing" value={poiControls.smoothing} min={0} max={100} suffix="%" onChange={updatePoiControl} />}
             </ControlGroup>
 
+            <ControlGroup title="Pattern size">
+              <PoiRange name="patternWidth" label="Width" value={poiControls.patternWidth} min={25} max={200} suffix="%" onChange={updatePoiControl} />
+              <PoiRange name="patternHeight" label="Height" value={poiControls.patternHeight} min={25} max={200} suffix="%" onChange={updatePoiControl} />
+            </ControlGroup>
+
             {clubPreset ? (
               <>
                 <ControlGroup title="Trail material">
                   <PoiRange name="lifetime" label="Lifetime" value={poiControls.lifetime} min={0} max={5000} step={50} suffix=" ms" onChange={updatePoiControl} />
                   <PoiRange name="brightness" label="Brightness" value={poiControls.brightness} min={0} max={100} suffix="%" onChange={updatePoiControl} />
                   <PoiRange name="glow" label="Glow" value={poiControls.glow} suffix="%" onChange={updatePoiControl} />
-                </ControlGroup>
-                <ControlGroup title="Pattern size">
-                  <PoiRange name="patternWidth" label="Width" value={poiControls.patternWidth} min={25} max={200} suffix="%" onChange={updatePoiControl} />
-                  <PoiRange name="patternHeight" label="Height" value={poiControls.patternHeight} min={25} max={200} suffix="%" onChange={updatePoiControl} />
                 </ControlGroup>
                 <PatternControls preset={preset.id as PatternId} controls={poiControls} update={updatePoiControl} loadImage={loadPoiImage} hasImage={Boolean(poiImageUrl)} />
               </>
