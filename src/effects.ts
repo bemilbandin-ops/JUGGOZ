@@ -1,6 +1,6 @@
 import { PATTERN_PRESETS, type PatternId } from './pixelPoiPatterns';
 
-export type PresetId = PatternId | 'neon' | 'ghost' | 'smoke' | 'vortex';
+export type PresetId = PatternId | 'neon' | 'ghost' | 'smoke' | 'vortex' | 'solar-flare' | 'orbit-echo' | 'aurora-drift' | 'meteor-rain';
 
 export type EffectControls = {
   trail: number;
@@ -60,6 +60,22 @@ export const PRESETS: EffectPreset[] = [
   {
     id: 'vortex', name: 'Vortex', description: 'A long, saturated trail pulled sharply inward while rotating around the frame center.',
     defaults: { trail: 96, intensity: 90, glow: 35, sensitivity: 70, isolation: 74, blur: 1, expansion: -28, spin: 65, driftX: 0, driftY: 0, hue: 215, cycle: 25, saturation: 90, echo: 0 },
+  },
+  {
+    id: 'solar-flare', name: 'Solar Flare', description: 'A compact orange-hot burst that rapidly blooms outward from every bright club movement.',
+    defaults: { trail: 58, intensity: 100, glow: 72, sensitivity: 74, isolation: 78, blur: 2.5, expansion: 82, spin: 5, driftX: 0, driftY: -8, hue: 18, cycle: 14, saturation: 100, echo: 0 },
+  },
+  {
+    id: 'orbit-echo', name: 'Orbit Echo', description: 'Crisp snapshots step around shallow rotating arcs instead of forming a continuous trail.',
+    defaults: { trail: 78, intensity: 92, glow: 18, sensitivity: 70, isolation: 76, blur: 0, expansion: 2, spin: 28, driftX: 18, driftY: -8, hue: 190, cycle: 38, saturation: 92, echo: 105 },
+  },
+  {
+    id: 'aurora-drift', name: 'Aurora Drift', description: 'Soft luminous color curtains slide sideways across the frame with slow, calm hue movement.',
+    defaults: { trail: 94, intensity: 72, glow: 46, sensitivity: 69, isolation: 70, blur: 5.5, expansion: 8, spin: 0, driftX: 82, driftY: -12, hue: 128, cycle: 11, saturation: 76, echo: 0 },
+  },
+  {
+    id: 'meteor-rain', name: 'Meteor Rain', description: 'Bright club motion falls into long vertical streaks with a fast electric color cycle.',
+    defaults: { trail: 92, intensity: 94, glow: 30, sensitivity: 73, isolation: 78, blur: 1, expansion: -4, spin: 0, driftX: 3, driftY: 96, hue: 208, cycle: 52, saturation: 100, echo: 0 },
   },
 ];
 
