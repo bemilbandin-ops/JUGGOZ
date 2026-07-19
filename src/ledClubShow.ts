@@ -6,10 +6,36 @@ PATTERN_CONTROL_DEFAULTS['led-club-show'] = {
   ...DEFAULT_POI_CONTROLS,
   lifetime: 900,
   brightness: 92,
-  glow: 40,
+  glow: 32,
   smoothing: 72,
 };
 CLUB_EFFECTS['led-club-show'] = CLUB_EFFECTS['neon-rails'];
+
+function hslToRgb(hue: number, saturation: number, lightness: number) {
+  const h = ((hue % 360) + 360) % 360 / 360;
+  const s = clamp(saturation, 0, 1);
+  const l = clamp(lightness, 0, 1);
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const section = h * 6;
+  const x = chroma * (1 - Math.abs(section % 2 - 1));
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (section < 1) [red, green] = [chroma, x];
+  else if (section < 2) [red, green] = [x, chroma];
+  else if (section < 3) [green, blue] = [chroma, x];
+  else if (section < 4) [green, blue] = [x, chroma];
+  else if (section < 5) [red, blue] = [x, chroma];
+  else [red, blue] = [chroma, x];
+
+  const match = l - chroma / 2;
+  return [
+    Math.round((red + match) * 255),
+    Math.round((green + match) * 255),
+    Math.round((blue + match) * 255),
+  ];
+}
 
 export function drawLedClubShow(
   ctx: CanvasRenderingContext2D,
@@ -17,48 +43,94 @@ export function drawLedClubShow(
   now: number,
   controls: PoiControls,
 ) {
-  const speed = now * 0.0022;
+  const source = document.querySelector<HTMLCanvasElement>('.stage > canvas.is-ready');
+  const sourceCtx = source?.getContext('2d', { willReadFrequently: true });
+  if (!source || !sourceCtx || source.width < 1 || source.height < 1) return;
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.lineCap = 'round';
+  const sourcePixels = sourceCtx.getImageData(0, 0, source.width, source.height);
+  const output = document.createElement('canvas');
+  output.width = source.width;
+  output.height = source.height;
+  const outputCtx = output.getContext('2d');
+  if (!outputCtx) return;
+  const colored = outputCtx.createImageData(source.width, source.height);
+
+  const transform = ctx.getTransform();
+  const scaleX = Math.hypot(transform.a, transform.b);
+  const scaleY = Math.hypot(transform.c, transform.d);
+  const averageScale = Math.max(0.001, (scaleX + scaleY) / 2);
+  const chasePosition = ((now * 0.00055) % 1 + 1) % 1;
+  const brightness = controls.brightness / 100;
 
   for (const track of tracks) {
     if (track.state === 'lost' || track.confidence < 0.16) continue;
 
-    const length = clamp(track.length, 28, 190);
-    const half = length / 2;
-    const segmentCount = clamp(Math.round(length / 8), 8, 24);
-    const segmentLength = length / segmentCount;
-    const phase = speed + track.id * 0.75;
-    const chase = ((phase * 0.55) % 1 + 1) % 1;
+    const centerX = track.center.x * transform.a + track.center.y * transform.c + transform.e;
+    const centerY = track.center.x * transform.b + track.center.y * transform.d + transform.f;
+    const angle = track.angle + Math.atan2(transform.b, transform.a);
+    const length = clamp(track.length * averageScale, 24, 420);
+    const halfLength = length / 2;
+    const radius = clamp(length * 0.12, 6, 34);
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const padding = radius + 4;
+    const minX = Math.max(0, Math.floor(centerX - Math.abs(cos) * halfLength - Math.abs(sin) * radius - padding));
+    const maxX = Math.min(source.width - 1, Math.ceil(centerX + Math.abs(cos) * halfLength + Math.abs(sin) * radius + padding));
+    const minY = Math.max(0, Math.floor(centerY - Math.abs(sin) * halfLength - Math.abs(cos) * radius - padding));
+    const maxY = Math.min(source.height - 1, Math.ceil(centerY + Math.abs(sin) * halfLength + Math.abs(cos) * radius + padding));
 
-    ctx.save();
-    ctx.translate(track.center.x, track.center.y);
-    ctx.rotate(track.angle);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const along = dx * cos + dy * sin;
+        const across = -dx * sin + dy * cos;
+        if (Math.abs(along) > halfLength || Math.abs(across) > radius) continue;
 
-    for (let index = 0; index < segmentCount; index++) {
-      const t = (index + 0.5) / segmentCount;
-      const x = -half + t * length;
-      const distanceToChase = Math.min(Math.abs(t - chase), 1 - Math.abs(t - chase));
-      const chaseBoost = Math.max(0, 1 - distanceToChase / 0.16);
-      const snake = 0.5 + 0.5 * Math.sin(t * Math.PI * 5.5 - phase * 4.2);
-      const hue = (phase * 70 + track.id * 58 + t * 210 + snake * 35) % 360;
-      const alpha = (0.18 + snake * 0.32 + chaseBoost * 0.45) * controls.brightness / 100;
-      const width = 2 + chaseBoost * 2.4;
+        const pixelIndex = (y * source.width + x) * 4;
+        const red = sourcePixels.data[pixelIndex];
+        const green = sourcePixels.data[pixelIndex + 1];
+        const blue = sourcePixels.data[pixelIndex + 2];
+        const luminance = (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
+        const maximum = Math.max(red, green, blue);
+        const minimum = Math.min(red, green, blue);
+        const saturation = maximum === 0 ? 0 : (maximum - minimum) / maximum;
 
-      ctx.strokeStyle = `hsla(${hue},100%,68%,${alpha})`;
-      ctx.lineWidth = width;
-      ctx.shadowColor = `hsl(${hue} 100% 60%)`;
-      ctx.shadowBlur = 2 + controls.glow * 0.055 + chaseBoost * 7;
-      ctx.beginPath();
-      ctx.moveTo(x - segmentLength * 0.34, 0);
-      ctx.lineTo(x + segmentLength * 0.34, 0);
-      ctx.stroke();
+        // Preserve only visible club texture. Dark, flat background pixels remain untouched.
+        const texture = clamp((luminance - 0.075) * 2.8 + saturation * 0.45, 0, 1);
+        if (texture < 0.12) continue;
+
+        const t = along / length + 0.5;
+        const wrappedDistance = Math.min(Math.abs(t - chasePosition), 1 - Math.abs(t - chasePosition));
+        const chase = Math.max(0, 1 - wrappedDistance / 0.13);
+        const snake = 0.5 + 0.5 * Math.sin(t * Math.PI * 7 - now * 0.007 + track.id * 1.3);
+        const hue = (now * 0.045 + track.id * 67 + t * 230 + snake * 42) % 360;
+        const lightness = clamp(0.42 + luminance * 0.28 + chase * 0.22, 0, 0.82);
+        const [tintRed, tintGreen, tintBlue] = hslToRgb(hue, 0.96, lightness);
+        const alpha = clamp(texture * (0.38 + snake * 0.22 + chase * 0.38) * brightness, 0, 0.96);
+
+        colored.data[pixelIndex] = tintRed;
+        colored.data[pixelIndex + 1] = tintGreen;
+        colored.data[pixelIndex + 2] = tintBlue;
+        colored.data[pixelIndex + 3] = Math.round(alpha * 255);
+      }
     }
-
-    ctx.restore();
   }
 
+  outputCtx.putImageData(colored, 0, 0);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'screen';
+  if (controls.glow > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.filter = `blur(${Math.max(1, controls.glow * 0.045)}px)`;
+    ctx.drawImage(output, 0, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.filter = 'none';
+  ctx.drawImage(output, 0, 0);
   ctx.restore();
 }
