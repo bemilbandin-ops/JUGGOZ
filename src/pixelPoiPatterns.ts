@@ -26,7 +26,7 @@ export type PatternPreset = {
 };
 
 export const PATTERN_PRESETS: PatternPreset[] = [
-  { id: 'neon-rails', name: 'Ghost Pulse', category: 'geometric', geometry: 'breathing club afterimages', description: 'Club-shaped ghosts throb independently behind each throw while slowly dissolving into the video.' },
+  { id: 'neon-rails', name: 'Ghost Trail', category: 'geometric', geometry: 'real club snapshot trail', description: 'Actual cropped video snapshots of the clubs remain behind the live clubs, pulse gently, and fade away slowly.' },
   { id: 'prism-ribbon', name: 'Prism Ribbon', category: 'geometric', geometry: 'open trajectory mesh', description: 'A tapered stained-glass ribbon follows the translated flight path.' },
   { id: 'chromatic-echoes', name: 'Chromatic Echoes', category: 'geometric', geometry: 'discrete pose stamps', description: 'Separated club silhouettes preserve the real rotation of the throw.' },
   { id: 'electric-comets', name: 'Electric Comets', category: 'geometric', geometry: 'endpoint particles', description: 'Independent electrical branches shed from both moving endpoints.' },
