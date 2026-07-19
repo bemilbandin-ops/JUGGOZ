@@ -154,17 +154,18 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         poiCtx.scale(poiCanvas.width / trackCanvas.width, poiCanvas.height / trackCanvas.height);
         drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null);
         poiCtx.restore();
+        let patternLayer = poiCanvas;
         ctx.globalCompositeOperation = compositing.blendMode;
         if (poi.glow > 0) {
           ctx.save();
           ctx.globalAlpha = poi.glow / 150;
           ctx.filter = effectLayerFilter(compositing.invert, `blur(${Math.max(2, poi.glow * 0.065)}px)`);
-          ctx.drawImage(poiCanvas, 0, 0);
+          ctx.drawImage(patternLayer, 0, 0);
           ctx.restore();
         }
         ctx.globalAlpha = Math.min(1, poi.brightness / 82);
         ctx.filter = effectLayerFilter(compositing.invert);
-        ctx.drawImage(poiCanvas, 0, 0);
+        ctx.drawImage(patternLayer, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';

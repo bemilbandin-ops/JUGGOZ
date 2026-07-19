@@ -29,6 +29,30 @@ const HELP: Record<keyof EffectControls, string> = {
   echo: 'Sets the delay between captured trail snapshots.',
 };
 
+const POI_HELP: Record<keyof PoiControls, string> = {
+  lifetime: 'How long the trails and particles remain visible before fading.',
+  brightness: 'Overall intensity of the glowing trail colors.',
+  glow: 'Outer soft bloom size around the trails.',
+  smoothing: 'Smoothes tracking jitter. Higher values reduce jitter but add input lag.',
+  lostReset: 'Time before a lost club is completely untracked.',
+  railSeparation: 'Distance between the parallel neon trails.',
+  crossbarFrequency: 'Deprecated: Spacing of horizontal ladder lines.',
+  ribbonWidth: 'Thickness of the continuous gradient ribbon.',
+  cellDensity: 'Spacing of nodes inside the ribbon.',
+  echoCount: 'Number of duplicated wireframe echo clones.',
+  echoSpacing: 'Distance between echo clones or concentric portals/eyes.',
+  branching: 'Controls particle orbit density or electricity splitting.',
+  turbulence: 'Wiggle amount of electric lightning arcs.',
+  latticeDensity: 'Spacing of lines in the lattice network or tunnel layers.',
+  strandCount: 'Number of coiling strands or color bands.',
+  waveAmplitude: 'Height of coiling waves, orbit radius, portal ripples, or melting drips.',
+  shardCount: 'Number of crystal particles emitted at the apex.',
+  shardSpread: 'Explosion velocity of apex crystal particles.',
+  tileSpacing: 'Spacing of mosaic nodes, blooms, or spore colonies.',
+  shapeMix: 'Scales custom shape sizes or mixes geometries.',
+  radialSymmetry: 'Number of mirror segments in the kaleidoscope or star points in the tunnel.',
+};
+
 export function App() {
   const [source, setSource] = useState<'camera' | 'upload'>('upload');
   const [preset, setPreset] = useState(INITIAL_PRESET);
@@ -170,14 +194,24 @@ export function App() {
 function PatternCard({ item, active, onActivate }: { item: EffectPreset; active: boolean; onActivate: (mode: 'current' | 'defaults') => void }) {
   const helpId = `preset-${item.id}-help`;
   return (
-    <section className={`preset-card ${item.id} ${active ? 'active' : ''}`} aria-label={item.name} aria-describedby={helpId}>
+    <section 
+      className={`preset-card ${item.id} ${active ? 'active' : ''}`} 
+      aria-label={item.name} 
+      aria-describedby={helpId}
+      style={{ cursor: active ? 'default' : 'pointer' }}
+      onClick={(e) => {
+        if (!active) {
+          onActivate('defaults');
+        }
+      }}
+    >
       <div className="preset-summary">
         <span className="preset-art" aria-hidden="true" />
         <strong>{item.name}</strong>
         {active && <span className="active-mark">Active</span>}
       </div>
       <small className="preset-description" id={helpId}>{item.description}</small>
-      <div className="preset-actions">
+      <div className="preset-actions" onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={() => onActivate('current')} aria-label={`Use ${item.name} with current settings`}>Use current</button>
         <button type="button" className="use-defaults" onClick={() => onActivate('defaults')} aria-label={`Use ${item.name} with default settings`}>Use defaults</button>
       </div>
@@ -205,7 +239,7 @@ function PatternControls({ preset, controls, update, loadImage, hasImage }: { pr
 
 function PoiRange({ name, label, value, onChange, min = 0, max = 100, step = 1, suffix = '' }: { name: keyof PoiControls; label: string; value: number; onChange: (key: keyof PoiControls, value: number) => void; min?: number; max?: number; step?: number; suffix?: string }) {
   const id = `poi-${name}`;
-  return <div className="range-row"><div className="range-label"><label htmlFor={id}>{label}</label><output htmlFor={id}>{value}{suffix}</output></div><input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(name, Number(event.target.value))} /></div>;
+  return <div className="range-row"><div className="range-label"><span><label htmlFor={id}>{label}</label><Help label={label} text={POI_HELP[name]} /></span><output htmlFor={id}>{value}{suffix}</output></div><input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(name, Number(event.target.value))} /></div>;
 }
 
 function ControlGroup({ title, children }: { title: string; children: React.ReactNode }) {

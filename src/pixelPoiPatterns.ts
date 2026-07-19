@@ -35,12 +35,12 @@ export const PATTERN_PRESETS: PatternPreset[] = [
   { id: 'apex-shatter', name: 'Apex Shatter', category: 'geometric', geometry: 'apex event shards', description: 'One restrained shard burst fires at the detected apex of each throw.' },
   { id: 'pixel-mosaic', name: 'Pixel Mosaic', category: 'geometric', geometry: 'path-oriented tiles', description: 'Spaced diamonds, chevrons, hexagons, and squares mark the flight path.' },
   { id: 'radial-pov', name: 'Radial POV', category: 'geometric', geometry: 'local radial spokes', description: 'The original center-based rotational effect, retained as an option.' },
-  { id: 'acid-blooms', name: 'Acid Blooms', category: 'psychedelic', geometry: 'animated petal mandalas', description: 'Pulsing rainbow flowers blossom and rotate along every throw.' },
-  { id: 'liquid-portal', name: 'Liquid Portal', category: 'psychedelic', geometry: 'warped concentric rings', description: 'Fluid neon portals ripple outward through the flight path.' },
-  { id: 'kaleido-tunnel', name: 'Kaleido Tunnel', category: 'psychedelic', geometry: 'nested rotating star wheels', description: 'Layered kaleidoscope stars twist into a prismatic tunnel.' },
-  { id: 'melting-rainbow', name: 'Melting Rainbow', category: 'psychedelic', geometry: 'dripping spectral bands', description: 'Thick spectral ribbons wobble, overlap, and melt behind the club.' },
-  { id: 'hypno-eyes', name: 'Hypno Eyes', category: 'psychedelic', geometry: 'alternating orbital eyes', description: 'Color-shifting eyes blink and stare from the trail.' },
-  { id: 'cosmic-spores', name: 'Cosmic Spores', category: 'psychedelic', geometry: 'orbiting halo colonies', description: 'Glowing spores orbit soft halos like a moving alien galaxy.' },
+  { id: 'acid-blooms', name: 'Crystalline Constellation', category: 'psychedelic', geometry: 'interconnected neon mesh', description: 'Thin glowing triangles span the trajectory to form a floating crystalline constellation.' },
+  { id: 'liquid-portal', name: 'Vector Swarm', category: 'psychedelic', geometry: 'flow-field particles', description: 'A localized swarm of neon sparks swirls and orbits within a fluid velocity flow field.' },
+  { id: 'kaleido-tunnel', name: 'Volumetric Fan Rays', category: 'psychedelic', geometry: 'rotational beam sweep', description: 'Volumetric light fan rays sweep outward from the club center like a high-speed laser scanner.' },
+  { id: 'melting-rainbow', name: 'Lava Plasma', category: 'psychedelic', geometry: 'merging metaballs', description: 'Glowing neon plasma blobs float along the path and merge organically like a lava lamp.' },
+  { id: 'hypno-eyes', name: 'Atomic Shell', category: 'psychedelic', geometry: 'multi-axis orbit rings', description: 'Thin glowing rings spin around the club center on multiple 3D axes like an orbital shell.' },
+  { id: 'cosmic-spores', name: 'Digital Glitch', category: 'psychedelic', geometry: 'vertical voxel strands', description: 'Vertical digital rain strands cascade and disintegrate along the flight path.' },
 ];
 
 export const DEFAULT_PATTERN_ID: PatternId = 'neon-rails';

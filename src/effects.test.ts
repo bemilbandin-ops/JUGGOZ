@@ -19,7 +19,7 @@ assert(extreme.zoom >= 1.035 && extreme.rotation >= 0.03, 'legacy transforms mus
 assert(preset('ghost').defaults.echo >= 100 && preset('smoke').defaults.blur >= 6, 'unrelated legacy presets must remain intact');
 
 const expectedGeometric = ['Neon Rails', 'Prism Ribbon', 'Chromatic Echoes', 'Electric Comets', 'Kinetic Lattice', 'Psychedelic Serpent', 'Apex Shatter', 'Pixel Mosaic', 'Radial POV'];
-const expectedPsychedelic = ['Acid Blooms', 'Liquid Portal', 'Kaleido Tunnel', 'Melting Rainbow', 'Hypno Eyes', 'Cosmic Spores'];
+const expectedPsychedelic = ['Crystalline Constellation', 'Vector Swarm', 'Volumetric Fan Rays', 'Lava Plasma', 'Atomic Shell', 'Digital Glitch'];
 assert(PATTERN_PRESETS.filter(({ category }) => category === 'geometric').map(({ name }) => name).join('|') === expectedGeometric.join('|'), 'geometric category must preserve the original nine patterns');
 assert(PATTERN_PRESETS.filter(({ category }) => category === 'psychedelic').map(({ name }) => name).join('|') === expectedPsychedelic.join('|'), 'psychedelic category must contain the six new patterns');
 assert(PRESETS[0].id === DEFAULT_PATTERN_ID && DEFAULT_PATTERN_ID === 'neon-rails', 'Neon Rails must be the default');
@@ -41,7 +41,11 @@ updateTrackPose(track, { x: 52, y: 66, angle: radians(48), length: 74, confidenc
 updateTrackPose(track, { x: 80, y: 54, angle: radians(75), length: 75, confidence: 1 }, 240, DEFAULT_POI_CONTROLS);
 assert(track.state === 'released' || track.state === 'airborne', 'sustained translated motion must release a held club');
 assert(track.history.length > 3, 'airborne paths must be spatially resampled');
-for (let index = 1; index < track.history.length; index++) assert(Math.hypot(track.history[index].center.x - track.history[index - 1].center.x, track.history[index].center.y - track.history[index - 1].center.y) <= 3.01, 'path samples must remain 2–4 screen pixels apart');
+for (let index = 1; index < track.history.length; index++) {
+  if (track.history[index].segment === track.history[index - 1].segment) {
+    assert(Math.hypot(track.history[index].center.x - track.history[index - 1].center.x, track.history[index].center.y - track.history[index - 1].center.y) <= 3.01, 'path samples must remain 2–4 screen pixels apart');
+  }
+}
 const lastPose = track.history.at(-1)!;
 assert(Math.abs(Math.hypot(lastPose.second.x - lastPose.first.x, lastPose.second.y - lastPose.first.y) - lastPose.length) < 0.001, 'each pose must expose both shaft endpoints');
 

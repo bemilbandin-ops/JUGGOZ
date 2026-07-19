@@ -216,7 +216,7 @@ function updateFlightState(track: PoiTrack, previousVy: number, now: number) {
 }
 
 function appendSpatialPoses(track: PoiTrack, now: number) {
-  if (!['released', 'airborne', 'apex'].includes(track.state) || track.confidence < 0.18) return [];
+  if (track.confidence < 0.18) return [];
   const current = pose(track, now);
   const previous = [...track.history].reverse().find((item) => item.segment === track.segment);
   if (!previous) {
@@ -355,11 +355,11 @@ type EffectRenderer = {
 };
 
 const noUpdate: EffectRenderer['update'] = () => undefined;
+const noRender: EffectRenderer['render'] = () => undefined;
 const resetTransient: EffectRenderer['reset'] = (track) => { track.particles = []; track.shards = []; };
 
 function trackFade(track: PoiTrack, now: number, controls: PoiControls) {
   if (track.state === 'lost') return clamp(1 - (now - track.lastSeen) / Math.min(420, controls.lostReset), 0, 1);
-  if (track.state === 'caught' || track.state === 'held') return clamp(1 - (now - track.stateAt) / 520, 0, 1);
   return 1;
 }
 
@@ -404,179 +404,76 @@ function renderRails(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number
     const separation = controls.railSeparation / 100;
     const aEnds = endpoints(a.center, a.angle, a.length * separation);
     const bEnds = endpoints(b.center, b.angle, b.length * separation);
-    drawSegment(ctx, aEnds.first, bEnds.first, color(track, 0, alpha), 3.2);
-    drawSegment(ctx, aEnds.second, bEnds.second, color(track, 1, alpha), 3.2);
-    drawSegment(ctx, aEnds.first, bEnds.first, `rgb(255 255 255 / ${alpha * 0.72})`, 0.8);
-    drawSegment(ctx, aEnds.second, bEnds.second, `rgb(255 255 255 / ${alpha * 0.72})`, 0.8);
-    if (Math.floor(a.travel / controls.crossbarFrequency) !== Math.floor(b.travel / controls.crossbarFrequency)) drawSegment(ctx, bEnds.first, bEnds.second, `rgb(220 250 255 / ${alpha * 0.58})`, 0.75);
+    
+    // First rail (glow + core)
+    drawSegment(ctx, aEnds.first, bEnds.first, color(track, 0, alpha * 0.4), 6);
+    drawSegment(ctx, aEnds.first, bEnds.first, `rgba(255, 255, 255, ${alpha * 0.95})`, 1.2);
+    
+    // Second rail (glow + core)
+    drawSegment(ctx, aEnds.second, bEnds.second, color(track, 1, alpha * 0.4), 6);
+    drawSegment(ctx, aEnds.second, bEnds.second, `rgba(255, 255, 255, ${alpha * 0.95})`, 1.2);
   });
 }
 
 function renderRibbon(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
   const visible = track.history.filter((item) => now - item.timestamp < controls.lifetime);
-  for (let index = 1; index < visible.length; index++) {
-    const a = visible[index - 1], b = visible[index];
-    if (a.segment !== b.segment || seeded(track.id * 71 + Math.floor(b.travel / controls.cellDensity)) < 0.14) continue;
-    const tangent = Math.atan2(b.center.y - a.center.y, b.center.x - a.center.x);
-    const normal = { x: -Math.sin(tangent), y: Math.cos(tangent) };
-    const taper = clamp(Math.min(index / 4, (visible.length - index) / 4), 0.18, 1);
-    const halfA = a.length * 0.27 * controls.ribbonWidth / 100 * taper;
-    const halfB = b.length * 0.27 * controls.ribbonWidth / 100 * taper;
-    const points = [
-      { x: a.center.x + normal.x * halfA, y: a.center.y + normal.y * halfA },
-      { x: b.center.x + normal.x * halfB, y: b.center.y + normal.y * halfB },
-      { x: b.center.x - normal.x * halfB, y: b.center.y - normal.y * halfB },
-      { x: a.center.x - normal.x * halfA, y: a.center.y - normal.y * halfA },
-    ];
-    const alpha = poseFade(b, track, now, controls);
-    ctx.fillStyle = color(track, index, alpha * 0.12, 54);
-    ctx.strokeStyle = color(track, index + 1, alpha * 0.7);
-    ctx.lineWidth = 0.85;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let p = 1; p < points.length; p++) ctx.lineTo(points[p].x, points[p].y);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    const diagonal = Math.sin(b.angle * 2) > 0 ? [points[0], points[2]] : [points[1], points[3]];
-    drawSegment(ctx, diagonal[0], diagonal[1], color(track, index + 3, alpha * 0.55), 0.7);
+  if (visible.length < 2) return;
+  
+  ctx.beginPath();
+  const alpha = trackFade(track, now, controls);
+  
+  const pointsLeft: Point[] = [];
+  const pointsRight: Point[] = [];
+  
+  for (let index = 0; index < visible.length; index++) {
+    const item = visible[index];
+    const taper = clamp(Math.min(index / 6, (visible.length - index) / 6), 0.1, 1);
+    const halfLen = item.length * 0.25 * (controls.ribbonWidth / 100) * taper;
+    const ends = endpoints(item.center, item.angle, halfLen);
+    pointsLeft.push(ends.first);
+    pointsRight.unshift(ends.second);
   }
+  
+  ctx.moveTo(pointsLeft[0].x, pointsLeft[0].y);
+  for (let p = 1; p < pointsLeft.length; p++) ctx.lineTo(pointsLeft[p].x, pointsLeft[p].y);
+  for (let p = 0; p < pointsRight.length; p++) ctx.lineTo(pointsRight[p].x, pointsRight[p].y);
+  ctx.closePath();
+  
+  const start = pointsLeft[0];
+  const end = pointsLeft[pointsLeft.length - 1] || start;
+  const grad = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
+  grad.addColorStop(0, color(track, 0, alpha * 0.32));
+  grad.addColorStop(0.5, color(track, 1, alpha * 0.32));
+  grad.addColorStop(1, color(track, 2, alpha * 0.32));
+  
+  ctx.fillStyle = grad;
+  ctx.fill();
+  
+  ctx.strokeStyle = color(track, 0, alpha * 0.7, 75);
+  ctx.lineWidth = 1.0;
+  ctx.stroke();
 }
 
-function renderEchoes(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  spacedPoses(track, now, controls, controls.echoSpacing, Math.round(controls.echoCount)).forEach((item, index) => {
-    const alpha = poseFade(item, track, now, controls) * (1 - index / (controls.echoCount + 2));
-    const scale = 1 - index * 0.018;
-    const ends = endpoints(item.center, item.angle, item.length * scale);
-    ctx.lineCap = 'round';
-    drawSegment(ctx, ends.first, ends.second, color(track, index, alpha * 0.18), 7 * scale);
-    drawSegment(ctx, ends.first, ends.second, color(track, index, alpha * 0.8), 1.35);
-    ctx.lineCap = 'butt';
-  });
-}
-
-function emitComets(track: PoiTrack, added: PoiPose[], now: number, controls: PoiControls) {
-  for (const item of added) {
-    if (Math.floor(item.travel / 12) === Math.floor((item.travel - 3) / 12)) continue;
-    const branchCount = 1 + Math.round(Math.abs(item.angularVelocity) * 500 * controls.branching / 100);
-    for (const [end, offset] of [[item.first, 0], [item.second, 1]] as const) track.particles.push({
-      origin: { ...end }, velocity: { ...item.velocity }, born: now,
-      seed: track.id * 1009 + item.travel * 7 + offset * 97,
-      branches: clamp(branchCount, 1, 3),
-    });
-  }
-}
-
-function renderComets(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  for (const particle of track.particles) {
-    const age = now - particle.born;
-    const alpha = clamp(1 - age / controls.lifetime, 0, 1) * trackFade(track, now, controls) * controls.brightness / 100;
-    const speed = Math.hypot(particle.velocity.x, particle.velocity.y);
-    const turbulence = controls.turbulence / 100 * clamp(1.3 - speed * 1.4, 0.22, 1.2);
-    for (let branch = 0; branch < particle.branches; branch++) {
-      let previous = particle.origin;
-      const branchAngle = (branch - (particle.branches - 1) / 2) * 0.32;
-      for (let step = 1; step <= 4; step++) {
-        const t = age * step / 4;
-        const curl = Math.sin(particle.seed * 0.07 + step * 1.9 + age * 0.006) * 12 * turbulence;
-        const next = {
-          x: particle.origin.x + particle.velocity.x * t * 0.42 + Math.cos(branchAngle + step) * curl,
-          y: particle.origin.y + particle.velocity.y * t * 0.42 + Math.sin(branchAngle + step) * curl,
-        };
-        drawSegment(ctx, previous, next, color(track, 0, alpha * 0.2), 1.45);
-        drawSegment(ctx, previous, next, `rgb(245 253 255 / ${alpha * 0.48})`, 0.5);
-        previous = next;
-      }
-    }
-  }
-}
-
-function renderLattice(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const samples = spacedPoses(track, now, controls, controls.latticeDensity).reverse();
-  for (let index = 1; index < samples.length; index++) {
-    const a = samples[index - 1], b = samples[index];
-    if (a.segment !== b.segment || distance(a.center, b.center) > controls.latticeDensity * 2.2) continue;
-    const alpha = poseFade(b, track, now, controls);
-    const vertices = index % 2 ? [a.first, b.second, b.first] : [a.second, b.first, b.second, a.first];
-    ctx.fillStyle = color(track, index + 2, alpha * 0.055);
-    ctx.strokeStyle = color(track, index, alpha * 0.7);
-    ctx.lineWidth = 0.9;
-    ctx.beginPath(); ctx.moveTo(vertices[0].x, vertices[0].y);
-    for (let vertex = 1; vertex < vertices.length; vertex++) ctx.lineTo(vertices[vertex].x, vertices[vertex].y);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-  }
-}
-
-function renderSerpent(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const strands = Math.round(controls.strandCount);
-  for (let strand = 0; strand < strands; strand++) {
-    eachPair(track, now, controls, (a, b) => {
-      const tangent = Math.atan2(b.center.y - a.center.y, b.center.x - a.center.x);
-      const normal = { x: -Math.sin(tangent), y: Math.cos(tangent) };
-      const phase = strand / strands * TAU;
-      const amplitude = controls.waveAmplitude * (0.55 + Math.min(1.4, Math.abs(b.angularVelocity) * 900));
-      const offsetA = Math.sin(a.travel * 0.075 - now * 0.0012 + phase) * amplitude + (strand - (strands - 1) / 2) * 2.4;
-      const offsetB = Math.sin(b.travel * 0.075 - now * 0.0012 + phase) * amplitude + (strand - (strands - 1) / 2) * 2.4;
-      const alpha = poseFade(b, track, now, controls);
-      drawSegment(ctx,
-        { x: a.center.x + normal.x * offsetA, y: a.center.y + normal.y * offsetA },
-        { x: b.center.x + normal.x * offsetB, y: b.center.y + normal.y * offsetB },
-        color(track, strand, alpha * 0.72), strand === Math.floor(strands / 2) ? 2.1 : 1.2);
-    });
-  }
-  for (const item of spacedPoses(track, now, controls, 62)) {
-    const alpha = poseFade(item, track, now, controls);
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(item.angle);
-    ctx.strokeStyle = color(track, 4, alpha * 0.8); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.ellipse(0, 0, 5.5, 2.8, 0, 0, TAU); ctx.stroke();
-    ctx.fillStyle = `rgb(255 255 255 / ${alpha * 0.75})`; ctx.beginPath(); ctx.arc(0, 0, 1.1, 0, TAU); ctx.fill(); ctx.restore();
-  }
-}
-
-function emitApex(track: PoiTrack, _added: PoiPose[], now: number, controls: PoiControls) {
-  if (track.state !== 'apex' || track.shards.some((item) => Math.abs(item.born - track.stateAt) < 2)) return;
-  const velocityAngle = Math.atan2(track.velocity.y, track.velocity.x);
-  const count = Math.round(controls.shardCount);
-  const spread = controls.shardSpread / 100 * Math.PI;
-  for (let index = 0; index < count; index++) {
-    const t = count === 1 ? 0.5 : index / (count - 1);
-    track.shards.push({
-      origin: { ...track.center },
-      angle: track.angle + velocityAngle * 0.22 + mix(-spread, spread, t) + (seeded(track.id * 31 + index) - 0.5) * 0.18,
-      speed: 0.018 + seeded(track.id * 53 + index) * 0.035,
-      spin: (seeded(track.id * 79 + index) - 0.5) * 0.009,
-      size: 5 + seeded(track.id * 101 + index) * 8,
-      born: now,
-    });
-  }
-}
-
-function renderShatter(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  track.shards.forEach((shard, index) => {
-    const age = now - shard.born;
-    const alpha = clamp(1 - age / Math.min(1300, controls.lifetime), 0, 1) * controls.brightness / 100;
-    const x = shard.origin.x + Math.cos(shard.angle) * shard.speed * age;
-    const y = shard.origin.y + Math.sin(shard.angle) * shard.speed * age + age * age * 0.000006;
-    ctx.save(); ctx.translate(x, y); ctx.rotate(shard.angle + shard.spin * age);
-    ctx.strokeStyle = color(track, index, alpha * 0.78); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(shard.size, 0); ctx.lineTo(-shard.size * 0.45, shard.size * 0.28); ctx.lineTo(-shard.size * 0.15, -shard.size * 0.24); ctx.closePath(); ctx.stroke(); ctx.restore();
-  });
-}
-
-function renderMosaic(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  spacedPoses(track, now, controls, controls.tileSpacing).forEach((item, index) => {
-    const alpha = poseFade(item, track, now, controls);
-    const speedScale = clamp(0.78 + item.speed * 0.7, 0.75, 1.35);
-    const size = (4.5 + seeded(track.id * 19 + item.travel) * 3) * speedScale;
-    const shape = Math.floor(seeded(track.id * 41 + item.travel * controls.shapeMix) * 4);
-    const tangent = Math.atan2(item.velocity.y, item.velocity.x);
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(Number.isFinite(tangent) ? tangent : item.angle);
-    ctx.strokeStyle = color(track, index, alpha * 0.78); ctx.lineWidth = 1.1; ctx.beginPath();
-    if (shape === 0) { ctx.moveTo(size, 0); ctx.lineTo(0, size); ctx.lineTo(-size, 0); ctx.lineTo(0, -size); ctx.closePath(); }
-    else if (shape === 1) { ctx.moveTo(-size, -size * 0.65); ctx.lineTo(0, 0); ctx.lineTo(-size, size * 0.65); ctx.moveTo(0, -size * 0.65); ctx.lineTo(size, 0); ctx.lineTo(0, size * 0.65); }
-    else if (shape === 2) for (let side = 0; side <= 6; side++) { const angle = side / 6 * TAU; const method = side ? 'lineTo' : 'moveTo'; ctx[method](Math.cos(angle) * size, Math.sin(angle) * size); }
-    else ctx.rect(-size * 0.7, -size * 0.7, size * 1.4, size * 1.4);
-    ctx.stroke();
-    ctx.rotate(item.angle - tangent); drawSegment(ctx, { x: -size * 0.45, y: 0 }, { x: size * 0.45, y: 0 }, `rgb(255 255 255 / ${alpha * 0.5})`, 0.65); ctx.restore();
-  });
+function drawClubSilhouette(ctx: CanvasRenderingContext2D, center: Point, angle: number, length: number, strokeColor: string, strokeWidth: number) {
+  const half = length / 2;
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(angle);
+  
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = strokeWidth;
+  
+  ctx.beginPath();
+  ctx.arc(-half + 4, 0, 4.5, 0, TAU); // Knob
+  ctx.moveTo(-half + 8.5, -1.2);
+  ctx.lineTo(-half * 0.1, -1.8); // Handle
+  ctx.bezierCurveTo(half * 0.2, -6.5, half * 0.75, -8.0, half * 0.9, -3.8); // Body
+  ctx.bezierCurveTo(half, -1.2, half, 1.2, half * 0.9, 3.8);
+  ctx.bezierCurveTo(half * 0.75, 8.0, half * 0.2, 6.5, -half * 0.1, 1.8);
+  ctx.lineTo(-half + 8.5, 1.2);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
 }
 
 function sampleImage(image: ImageData, u: number, v: number) {
@@ -586,136 +483,590 @@ function sampleImage(image: ImageData, u: number, v: number) {
   return `rgb(${image.data[offset]} ${image.data[offset + 1]} ${image.data[offset + 2]} / ${image.data[offset + 3] / 255})`;
 }
 
-function renderRadial(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null) {
-  const latest = track.history.at(-1);
-  if (!latest) return;
-  const spokes = spacedPoses(track, now, controls, Math.max(3, 42 / controls.radialSymmetry), 80);
-  for (const [index, item] of spokes.entries()) {
-    const alpha = poseFade(item, track, now, controls) * 0.64;
-    const ends = endpoints(latest.center, item.angle, item.length);
-    const stroke = image ? sampleImage(image, index / Math.max(1, spokes.length - 1), (Math.sin(item.angle) + 1) / 2) : color(track, index, alpha);
-    ctx.globalAlpha = alpha;
-    drawSegment(ctx, ends.first, ends.second, stroke, 1.6);
-  }
-  ctx.globalAlpha = 1;
-}
-
 function acidColor(track: PoiTrack, item: PoiPose, now: number, offset = 0, alpha = 1, lightness = 60) {
   const hue = (item.travel * 2.4 + now * 0.09 + track.id * 47 + offset) % 360;
   return `hsl(${hue} 100% ${lightness}% / ${clamp(alpha, 0, 0.88)})`;
 }
 
-function renderBlooms(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const petals = Math.round(controls.radialSymmetry);
-  for (const item of spacedPoses(track, now, controls, controls.tileSpacing)) {
-    const alpha = poseFade(item, track, now, controls);
-    const pulse = 1 + Math.sin(now * 0.006 + item.travel * 0.08) * 0.22;
-    const radius = clamp(item.length * 0.17 * pulse, 8, 22);
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(item.angle + now * 0.0005);
-    for (let petal = 0; petal < petals; petal++) {
-      ctx.rotate(TAU / petals);
-      ctx.fillStyle = acidColor(track, item, now, petal * 360 / petals, alpha * 0.22, 56);
-      ctx.strokeStyle = acidColor(track, item, now, petal * 360 / petals + 35, alpha * 0.72, 68);
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.ellipse(radius * 0.72, 0, radius * 0.72, radius * 0.28, 0, 0, TAU); ctx.fill(); ctx.stroke();
-    }
-    ctx.fillStyle = `rgb(255 255 210 / ${alpha * 0.78})`; ctx.beginPath(); ctx.arc(0, 0, radius * 0.18, 0, TAU); ctx.fill(); ctx.restore();
-  }
-}
-
-function renderPortals(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  for (const item of spacedPoses(track, now, controls, controls.echoSpacing)) {
-    const alpha = poseFade(item, track, now, controls);
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(item.angle);
-    for (let ring = 1; ring <= 4; ring++) {
-      const wobble = Math.sin(now * 0.004 + item.travel * 0.1 + ring) * controls.waveAmplitude * 0.12;
-      ctx.strokeStyle = acidColor(track, item, now, ring * 62, alpha * (0.82 - ring * 0.1), 66);
-      ctx.lineWidth = ring === 1 ? 2.2 : 1.2;
-      ctx.beginPath(); ctx.ellipse(wobble, 0, 4 + ring * 5.5 + wobble * 0.2, 2 + ring * 2.8, ring * 0.12, 0, TAU); ctx.stroke();
-    }
-    ctx.restore();
-  }
-}
-
-function renderKaleido(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const points = Math.round(controls.radialSymmetry);
-  for (const item of spacedPoses(track, now, controls, controls.latticeDensity)) {
-    const alpha = poseFade(item, track, now, controls);
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(item.angle + now * 0.0008);
-    for (let layer = 3; layer > 0; layer--) {
-      const outer = 5 + layer * 4.8, inner = outer * (0.34 + layer * 0.06);
-      ctx.strokeStyle = acidColor(track, item, now, layer * 88, alpha * (0.82 - layer * 0.12), 66);
-      ctx.lineWidth = layer === 1 ? 1.8 : 1;
-      ctx.beginPath();
-      for (let point = 0; point <= points * 2; point++) {
-        const angle = point / (points * 2) * TAU;
-        const radius = point % 2 ? inner : outer;
-        if (point) ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius); else ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
-      }
-      ctx.stroke(); ctx.rotate(-now * 0.00035 * layer);
-    }
-    ctx.restore();
-  }
-}
-
-function renderMeltingRainbow(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const strands = Math.round(controls.strandCount);
-  for (let strand = 0; strand < strands; strand++) eachPair(track, now, controls, (a, b) => {
-    const tangent = Math.atan2(b.center.y - a.center.y, b.center.x - a.center.x);
-    const normal = { x: -Math.sin(tangent), y: Math.cos(tangent) };
-    const band = (strand - (strands - 1) / 2) * 4.5;
-    const meltA = band + Math.sin(a.travel * 0.045 + now * 0.002 + strand) * controls.waveAmplitude * 0.45 + Math.max(0, now - a.timestamp) * 0.006;
-    const meltB = band + Math.sin(b.travel * 0.045 + now * 0.002 + strand) * controls.waveAmplitude * 0.45 + Math.max(0, now - b.timestamp) * 0.006;
-    const alpha = poseFade(b, track, now, controls);
-    drawSegment(ctx, { x: a.center.x + normal.x * meltA, y: a.center.y + normal.y * meltA }, { x: b.center.x + normal.x * meltB, y: b.center.y + normal.y * meltB }, acidColor(track, b, now, strand * 66, alpha * 0.6, 62), 4.8);
+function renderEchoes(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  spacedPoses(track, now, controls, controls.echoSpacing, Math.round(controls.echoCount)).forEach((item, index) => {
+    const alpha = poseFade(item, track, now, controls) * (1 - index / (controls.echoCount + 2));
+    const scale = 1 - index * 0.02;
+    const len = item.length * scale;
+    
+    const speed = Math.hypot(item.velocity.x, item.velocity.y);
+    const offset = Math.min(6.0, speed * 15);
+    const dir = speed > 0.001 ? { x: item.velocity.x / speed, y: item.velocity.y / speed } : { x: 0, y: 0 };
+    
+    // Red chromatic echo
+    drawClubSilhouette(
+      ctx,
+      { x: item.center.x - dir.x * offset, y: item.center.y - dir.y * offset },
+      item.angle,
+      len,
+      `rgba(255, 0, 100, ${alpha * 0.4})`,
+      1.0
+    );
+    
+    // Cyan chromatic echo
+    drawClubSilhouette(
+      ctx,
+      { x: item.center.x + dir.x * offset, y: item.center.y + dir.y * offset },
+      item.angle,
+      len,
+      `rgba(0, 200, 255, ${alpha * 0.4})`,
+      1.0
+    );
+    
+    // White core echo
+    drawClubSilhouette(
+      ctx,
+      item.center,
+      item.angle,
+      len,
+      `rgba(255, 255, 255, ${alpha * 0.8})`,
+      1.0
+    );
   });
 }
 
-function renderEyes(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  for (const [index, item] of spacedPoses(track, now, controls, controls.echoSpacing).entries()) {
-    const alpha = poseFade(item, track, now, controls);
-    const blink = 0.35 + Math.abs(Math.sin(now * 0.003 + index * 1.7)) * 0.65;
-    const size = 8 + controls.shapeMix * 0.07;
-    ctx.save(); ctx.translate(item.center.x, item.center.y); ctx.rotate(item.angle + Math.PI / 2);
-    ctx.fillStyle = acidColor(track, item, now, index * 55, alpha * 0.2, 58);
-    ctx.strokeStyle = acidColor(track, item, now, index * 55 + 95, alpha * 0.82, 72); ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.ellipse(0, 0, size, size * 0.52 * blink, 0, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = `rgb(15 4 35 / ${alpha * 0.9})`; ctx.beginPath(); ctx.arc(Math.sin(now * 0.002 + index) * size * 0.24, 0, size * 0.23 * blink, 0, TAU); ctx.fill(); ctx.restore();
+function emitComets(track: PoiTrack, added: PoiPose[], now: number, controls: PoiControls) {
+  // Do not emit particles
+}
+
+function renderComets(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  // Draw nothing for individual comets to only show the connecting electricity
+}
+
+function renderLattice(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const samples = spacedPoses(track, now, controls, controls.latticeDensity).reverse();
+  if (samples.length < 2) return;
+  
+  ctx.strokeStyle = color(track, 0, trackFade(track, now, controls) * 0.2, 70);
+  ctx.lineWidth = 0.8;
+  
+  ctx.beginPath();
+  for (let index = 1; index < samples.length; index++) {
+    const a = samples[index - 1], b = samples[index];
+    if (a.segment !== b.segment || distance(a.center, b.center) > controls.latticeDensity * 2.8) continue;
+    
+    ctx.moveTo(a.center.x, a.center.y);
+    ctx.lineTo(b.center.x, b.center.y);
+    ctx.moveTo(a.first.x, a.first.y);
+    ctx.lineTo(b.first.x, b.first.y);
+    ctx.moveTo(a.second.x, a.second.y);
+    ctx.lineTo(b.second.x, b.second.y);
+  }
+  ctx.stroke();
+}
+
+function renderSerpent(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  eachPair(track, now, controls, (a, b) => {
+    const tangent = Math.atan2(b.center.y - a.center.y, b.center.x - a.center.x);
+    const normal = { x: -Math.sin(tangent), y: Math.cos(tangent) };
+    const alpha = poseFade(b, track, now, controls);
+    const amplitude = controls.waveAmplitude * 2.2;
+    
+    const offsetA = Math.sin(a.travel * 0.08 - now * 0.003) * amplitude;
+    const offsetB = Math.sin(b.travel * 0.08 - now * 0.003) * amplitude;
+    
+    const ptA1 = { x: a.center.x + normal.x * offsetA, y: a.center.y + normal.y * offsetA };
+    const ptB1 = { x: b.center.x + normal.x * offsetB, y: b.center.y + normal.y * offsetB };
+    
+    const ptA2 = { x: a.center.x - normal.x * offsetA, y: a.center.y - normal.y * offsetA };
+    const ptB2 = { x: b.center.x - normal.x * offsetB, y: b.center.y - normal.y * offsetB };
+    
+    drawSegment(ctx, ptA1, ptB1, acidColor(track, b, now, 0, alpha * 0.5, 65), 14);
+    drawSegment(ctx, ptA2, ptB2, acidColor(track, b, now, 180, alpha * 0.5, 65), 14);
+    
+    drawSegment(ctx, ptA1, ptB1, `rgba(255, 255, 255, ${alpha * 0.95})`, 3.0);
+    drawSegment(ctx, ptA2, ptB2, `rgba(255, 255, 255, ${alpha * 0.95})`, 3.0);
+  });
+}
+
+function emitApex(track: PoiTrack, _added: PoiPose[], now: number, controls: PoiControls) {
+  if (track.state !== 'apex' || track.shards.some((item) => Math.abs(item.born - track.stateAt) < 2)) return;
+  const count = Math.round(controls.shardCount * 2.0);
+  for (let index = 0; index < count; index++) {
+    track.shards.push({
+      origin: { ...track.center },
+      angle: (index / count) * TAU + seeded(track.id * 31 + index) * 0.6,
+      speed: 0.03 + seeded(track.id * 53 + index) * 0.06,
+      spin: (seeded(track.id * 79 + index) - 0.5) * 0.05,
+      size: 6.0 + seeded(track.id * 101 + index) * 8.0,
+      born: now,
+    });
   }
 }
 
-function renderSpores(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
-  const satellites = 2 + Math.round(controls.branching / 24);
-  for (const item of spacedPoses(track, now, controls, controls.tileSpacing)) {
+function renderShatter(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  track.shards.forEach((shard, index) => {
+    const age = now - shard.born;
+    const alpha = clamp(1 - age / (controls.lifetime * 1.2), 0, 1) * controls.brightness / 100;
+    
+    const x = shard.origin.x + Math.cos(shard.angle) * shard.speed * age;
+    const y = shard.origin.y + Math.sin(shard.angle) * shard.speed * age + age * age * 0.00003;
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(shard.angle + age * shard.spin);
+    
+    ctx.fillStyle = color(track, index, alpha * 0.4, 70);
+    ctx.beginPath();
+    ctx.moveTo(0, -shard.size * 1.5);
+    ctx.lineTo(shard.size, 0);
+    ctx.lineTo(0, shard.size * 1.5);
+    ctx.lineTo(-shard.size, 0);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
+    ctx.beginPath();
+    ctx.moveTo(0, -shard.size * 0.6);
+    ctx.lineTo(shard.size * 0.4, 0);
+    ctx.lineTo(0, shard.size * 0.6);
+    ctx.lineTo(-shard.size * 0.4, 0);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+  });
+}
+
+function renderMosaic(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  spacedPoses(track, now, controls, controls.tileSpacing * 0.8).forEach((item, index) => {
     const alpha = poseFade(item, track, now, controls);
-    const radius = 5 + controls.waveAmplitude * 0.28;
-    ctx.strokeStyle = acidColor(track, item, now, 120, alpha * 0.32, 66); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(item.center.x, item.center.y, radius, 0, TAU); ctx.stroke();
-    for (let dot = 0; dot < satellites; dot++) {
-      const angle = now * (0.001 + dot * 0.00018) + item.travel * 0.05 + dot / satellites * TAU;
-      const orbit = radius * (0.65 + (dot % 3) * 0.28);
-      ctx.fillStyle = acidColor(track, item, now, dot * 71, alpha * 0.78, 68);
-      ctx.beginPath(); ctx.arc(item.center.x + Math.cos(angle) * orbit, item.center.y + Math.sin(angle) * orbit, 1.4 + dot % 2, 0, TAU); ctx.fill();
-    }
+    const size = 12.0;
+    
+    ctx.save();
+    ctx.translate(item.center.x, item.center.y);
+    ctx.rotate(item.angle + now * 0.002);
+    
+    ctx.strokeStyle = color(track, index, alpha * 0.85, 68);
+    ctx.lineWidth = 2.5;
+    
+    ctx.beginPath();
+    ctx.rect(-size, -size, size * 2, size * 2);
+    ctx.stroke();
+    
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.5, 0, TAU);
+    ctx.fill();
+    
+    ctx.restore();
+  });
+}
+
+function renderRadial(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls, image: ImageData | null) {
+  const latest = track.history.at(-1);
+  if (!latest) return;
+  const spokes = spacedPoses(track, now, controls, Math.max(3, 40 / controls.radialSymmetry), 80);
+  
+  for (const [index, item] of spokes.entries()) {
+    const alpha = poseFade(item, track, now, controls) * 0.7;
+    const ends = endpoints(latest.center, item.angle, item.length);
+    const stroke = image ? sampleImage(image, index / Math.max(1, spokes.length - 1), (Math.sin(item.angle) + 1) / 2) : color(track, index, alpha, 70);
+    
+    drawSegment(ctx, ends.first, ends.second, stroke, 3.0);
   }
 }
+
+function renderCrystallineConstellation(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const poses = spacedPoses(track, now, controls, Math.max(10, controls.tileSpacing));
+  if (poses.length < 3) return;
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  const maxDist = 65;
+  
+  for (let i = 0; i < poses.length; i++) {
+    const alphaI = poseFade(poses[i], track, now, controls);
+    if (alphaI <= 0.05) continue;
+    
+    for (let j = i + 1; j < Math.min(poses.length, i + 4); j++) {
+      const alphaJ = poseFade(poses[j], track, now, controls);
+      
+      for (let k = j + 1; k < Math.min(poses.length, i + 5); k++) {
+        const alphaK = poseFade(poses[k], track, now, controls);
+        
+        const pA = poses[i].center;
+        const pB = poses[j].center;
+        const pC = poses[k].center;
+        
+        const dAB = distance(pA, pB);
+        const dBC = distance(pB, pC);
+        const dCA = distance(pC, pA);
+        
+        if (dAB < maxDist && dBC < maxDist && dCA < maxDist) {
+          const avgAlpha = (alphaI + alphaJ + alphaK) / 3;
+          const hue = (poses[i].travel * 1.6 + now * 0.06 + track.id * 45) % 360;
+          
+          ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${avgAlpha * 0.16})`;
+          ctx.beginPath();
+          ctx.moveTo(pA.x, pA.y);
+          ctx.lineTo(pB.x, pB.y);
+          ctx.lineTo(pC.x, pC.y);
+          ctx.closePath();
+          ctx.fill();
+          
+          ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${avgAlpha * 0.75})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  
+  poses.forEach((p) => {
+    const alpha = poseFade(p, track, now, controls);
+    if (alpha <= 0.05) return;
+    const hue = (p.travel * 1.6 + now * 0.06 + track.id * 45) % 360;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = `hsla(${hue}, 100%, 60%, 1.0)`;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(p.center.x, p.center.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  ctx.restore();
+}
+
+function updateVectorSwarm(track: PoiTrack, added: PoiPose[], now: number, controls: PoiControls) {
+  const density = Math.max(1, Math.round(controls.echoSpacing / 6));
+  added.forEach((pose) => {
+    for (let i = 0; i < density; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (0.5 + Math.random() * 1.5) * (controls.waveAmplitude / 20);
+      track.particles.push({
+        origin: { x: pose.center.x, y: pose.center.y },
+        velocity: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+        born: now,
+        seed: Math.random(),
+        branches: 0
+      });
+    }
+  });
+  
+  track.particles = track.particles.filter((p) => now - p.born < controls.lifetime);
+}
+
+function renderVectorSwarm(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  track.particles.forEach((p) => {
+    const age = now - p.born;
+    const progress = age / controls.lifetime;
+    if (progress >= 1.0) return;
+    
+    const t = age * 0.005;
+    const swirlX = Math.sin(t + p.seed * Math.PI * 2) * 15;
+    const swirlY = Math.cos(t * 1.5 + p.seed * Math.PI * 2) * 15;
+    
+    const px = p.origin.x + p.velocity.x * age + swirlX;
+    const py = p.origin.y + p.velocity.y * age + swirlY;
+    
+    const alpha = poseFade({ timestamp: p.born } as any, track, now, controls) * (1 - progress);
+    const size = Math.max(0.5, 2.5 * (1 - progress));
+    const hue = (140 + p.seed * 360 + now * 0.02) % 360;
+    
+    ctx.fillStyle = `hsla(${hue}, 100%, 70%, ${alpha * 0.9})`;
+    ctx.shadowColor = `hsla(${hue}, 100%, 60%, ${alpha * 0.9})`;
+    ctx.shadowBlur = size * 2.0;
+    
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  ctx.restore();
+}
+
+function renderVolumetricFanRays(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const spacing = Math.max(15, controls.latticeDensity);
+  const poses = spacedPoses(track, now, controls, spacing);
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  poses.forEach((item, index) => {
+    const alpha = poseFade(item, track, now, controls);
+    if (alpha <= 0.05) return;
+    
+    const age = now - item.timestamp;
+    const progress = age / controls.lifetime;
+    const maxLen = item.length * 0.45 * (1 - progress);
+    if (maxLen < 4) return;
+    
+    const rayCount = 3;
+    const baseAngle = now * 0.005 + index * 0.3;
+    const spread = Math.PI / 10;
+    const hue = (240 + item.travel * 1.5 + now * 0.08) % 360;
+    
+    ctx.save();
+    ctx.translate(item.center.x, item.center.y);
+    ctx.globalAlpha = alpha * (1 - progress);
+    
+    for (let r = 0; r < rayCount; r++) {
+      const angle = baseAngle + r * (Math.PI * 2 / rayCount);
+      
+      ctx.save();
+      ctx.rotate(angle);
+      
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, maxLen, -spread / 2, spread / 2);
+      ctx.closePath();
+      
+      const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, maxLen);
+      grad.addColorStop(0, `hsla(${hue}, 100%, 75%, 0.65)`);
+      grad.addColorStop(0.3, `hsla(${hue}, 100%, 60%, 0.3)`);
+      grad.addColorStop(1, 'transparent');
+      
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+function renderLavaPlasma(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const spacing = Math.max(10, controls.strandCount * 2);
+  const poses = spacedPoses(track, now, controls, spacing);
+  if (poses.length < 2) return;
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  poses.forEach((item) => {
+    const alpha = poseFade(item, track, now, controls);
+    if (alpha <= 0.05) return;
+    
+    const age = now - item.timestamp;
+    const progress = age / controls.lifetime;
+    
+    const wiggle = Math.sin(item.travel * 0.04 + now * 0.003) * controls.waveAmplitude * 0.15;
+    const size = Math.max(4, item.length * 0.22 * (1 - progress) + wiggle);
+    
+    const hue = (item.travel * 1.5 + now * 0.07) % 360;
+    
+    const grad = ctx.createRadialGradient(item.center.x, item.center.y, 1, item.center.x, item.center.y, size);
+    grad.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.95)`);
+    grad.addColorStop(0.5, `hsla(${(hue + 25) % 360}, 100%, 55%, 0.4)`);
+    grad.addColorStop(1, 'transparent');
+    
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(item.center.x, item.center.y, size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  ctx.restore();
+}
+
+function renderAtomicShell(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const spacing = Math.max(15, controls.echoSpacing);
+  const poses = spacedPoses(track, now, controls, spacing);
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  poses.forEach((item, index) => {
+    const alpha = poseFade(item, track, now, controls);
+    if (alpha <= 0.05) return;
+    
+    const age = now - item.timestamp;
+    const progress = age / controls.lifetime;
+    const radius = Math.max(5, item.length * 0.32 * (1 - progress));
+    const hue = (180 + item.travel * 1.5 + now * 0.08) % 360;
+    
+    ctx.save();
+    ctx.translate(item.center.x, item.center.y);
+    ctx.globalAlpha = alpha * (1 - progress);
+    
+    const shellCount = 3;
+    for (let s = 0; s < shellCount; s++) {
+      ctx.save();
+      ctx.rotate(s * Math.PI / shellCount + now * 0.002);
+      ctx.scale(1.0, 0.28);
+      
+      ctx.strokeStyle = `hsla(${(hue + s * 40) % 360}, 100%, 65%, 0.85)`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = `hsla(${(hue + s * 40) % 360}, 100%, 60%, 0.8)`;
+      ctx.shadowBlur = radius * 0.3;
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  });
+  
+  ctx.restore();
+}
+
+function renderDigitalGlitch(ctx: CanvasRenderingContext2D, track: PoiTrack, now: number, controls: PoiControls) {
+  const spacing = Math.max(15, controls.tileSpacing);
+  const poses = spacedPoses(track, now, controls, spacing);
+  
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  
+  poses.forEach((item, index) => {
+    const alpha = poseFade(item, track, now, controls);
+    if (alpha <= 0.05) return;
+    
+    const age = now - item.timestamp;
+    const progress = age / controls.lifetime;
+    
+    const strandLength = Math.max(2, Math.round(controls.branching / 12));
+    const hue = (300 + item.travel * 1.5 + now * 0.07) % 360;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha * (1 - progress);
+    
+    const speed = 0.12 * controls.waveAmplitude;
+    const fallDist = age * speed;
+    
+    for (let s = 0; s < strandLength; s++) {
+      const yOffset = fallDist + s * 6.0;
+      const blockAlpha = 1.0 - (s / strandLength);
+      
+      const glitchX = (seeded(item.travel * 10 + s + Math.floor(now / 80)) - 0.5) * 6.0;
+      
+      ctx.fillStyle = `hsla(${hue}, 100%, 65%, ${blockAlpha * 0.9})`;
+      ctx.shadowColor = `hsla(${hue}, 100%, 60%, 1.0)`;
+      ctx.shadowBlur = 4;
+      
+      ctx.fillRect(
+        item.center.x + glitchX - 1.5,
+        item.center.y + yOffset - 3,
+        3,
+        4
+      );
+    }
+    ctx.restore();
+  });
+  
+  ctx.restore();
+}
+
+function drawElectricArc(ctx: CanvasRenderingContext2D, from: Point, to: Point, color: string, width: number, seed: number) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  if (dist < 1) return;
+  const segments = Math.max(3, Math.floor(dist / 10));
+  
+  for (let i = 1; i < segments; i++) {
+    const t = i / segments;
+    const baseX = from.x + (to.x - from.x) * t;
+    const baseY = from.y + (to.y - from.y) * t;
+    
+    const perpX = -(to.y - from.y) / dist;
+    const perpY = (to.x - from.x) / dist;
+    const offset = Math.sin(t * Math.PI) * (seeded(seed + i) - 0.5) * 14.0;
+    
+    ctx.lineTo(baseX + perpX * offset, baseY + perpY * offset);
+  }
+  
+  ctx.lineTo(to.x, to.y);
+  ctx.stroke();
+}
+
+function connectActiveClubs(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls, patternId: PatternId) {
+  const active = tracks.filter(t => t.state !== 'lost');
+  if (active.length < 2) return;
+  
+  ctx.save();
+  if (patternId === 'kinetic-lattice') {
+    ctx.strokeStyle = 'rgba(0, 255, 200, 0.45)';
+    ctx.lineWidth = 3.0;
+    ctx.beginPath();
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        ctx.moveTo(active[i].center.x, active[i].center.y);
+        ctx.lineTo(active[j].center.x, active[j].center.y);
+      }
+    }
+    ctx.stroke();
+  } else if (patternId === 'electric-comets') {
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const hue = (now * 0.1 + i * 60) % 360;
+        // Outer glow arc
+        drawElectricArc(
+          ctx,
+          active[i].center,
+          active[j].center,
+          `hsla(${hue}, 100%, 75%, 0.5)`,
+          5.0,
+          now * 0.001 + i
+        );
+        // Inner white core arc
+        drawElectricArc(
+          ctx,
+          active[i].center,
+          active[j].center,
+          `rgba(255, 255, 255, 0.9)`,
+          1.2,
+          now * 0.001 + i
+        );
+      }
+    }
+  } else if (patternId === 'neon-rails') {
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const hue = (now * 0.08 + i * 120) % 360;
+        // Outer glow
+        ctx.strokeStyle = `hsla(${hue}, 100%, 65%, 0.55)`;
+        ctx.lineWidth = 6.0;
+        ctx.beginPath();
+        ctx.moveTo(active[i].center.x, active[i].center.y);
+        ctx.lineTo(active[j].center.x, active[j].center.y);
+        ctx.stroke();
+        
+        // Inner white core
+        ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(active[i].center.x, active[i].center.y);
+        ctx.lineTo(active[j].center.x, active[j].center.y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+
 
 export const CLUB_EFFECTS: Record<PatternId, EffectRenderer> = {
   'neon-rails': { update: noUpdate, render: renderRails, reset: resetTransient },
   'prism-ribbon': { update: noUpdate, render: renderRibbon, reset: resetTransient },
   'chromatic-echoes': { update: noUpdate, render: renderEchoes, reset: resetTransient },
-  'electric-comets': { update: emitComets, render: renderComets, reset: resetTransient },
+  'electric-comets': { update: noUpdate, render: renderComets, reset: resetTransient },
   'kinetic-lattice': { update: noUpdate, render: renderLattice, reset: resetTransient },
   'psychedelic-serpent': { update: noUpdate, render: renderSerpent, reset: resetTransient },
   'apex-shatter': { update: emitApex, render: renderShatter, reset: resetTransient },
   'pixel-mosaic': { update: noUpdate, render: renderMosaic, reset: resetTransient },
   'radial-pov': { update: noUpdate, render: renderRadial, reset: resetTransient },
-  'acid-blooms': { update: noUpdate, render: renderBlooms, reset: resetTransient },
-  'liquid-portal': { update: noUpdate, render: renderPortals, reset: resetTransient },
-  'kaleido-tunnel': { update: noUpdate, render: renderKaleido, reset: resetTransient },
-  'melting-rainbow': { update: noUpdate, render: renderMeltingRainbow, reset: resetTransient },
-  'hypno-eyes': { update: noUpdate, render: renderEyes, reset: resetTransient },
-  'cosmic-spores': { update: noUpdate, render: renderSpores, reset: resetTransient },
+  'acid-blooms': { update: noUpdate, render: renderCrystallineConstellation, reset: resetTransient },
+  'liquid-portal': { update: updateVectorSwarm, render: renderVectorSwarm, reset: resetTransient },
+  'kaleido-tunnel': { update: noUpdate, render: renderVolumetricFanRays, reset: resetTransient },
+  'melting-rainbow': { update: noUpdate, render: renderLavaPlasma, reset: resetTransient },
+  'hypno-eyes': { update: noUpdate, render: renderAtomicShell, reset: resetTransient },
+  'cosmic-spores': { update: noUpdate, render: renderDigitalGlitch, reset: resetTransient },
 };
 
 export function drawPoiLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls, patternId: PatternId, image: ImageData | null) {
@@ -723,6 +1074,14 @@ export function drawPoiLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], 
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  for (const track of tracks) CLUB_EFFECTS[patternId].render(ctx, track, now, controls, image);
+  
+  // 1. Draw active club connections (electric arcs, neon lines)
+  connectActiveClubs(ctx, tracks, now, controls, patternId);
+  
+  // 2. Draw individual club trajectories
+  for (const track of tracks) {
+    CLUB_EFFECTS[patternId].render(ctx, track, now, controls, image);
+  }
+  
   ctx.restore();
 }
