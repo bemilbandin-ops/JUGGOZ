@@ -6,13 +6,15 @@ import { drawLedClubShow } from './ledClubShow';
 import { detectClubs, drawPoiLayer, updateTracks, type PoiControls, type PoiTrack } from './pixelPoi';
 import { isPatternId } from './pixelPoiPatterns';
 
+type SizedPoiControls = PoiControls & { patternWidth?: number; patternHeight?: number };
+
 type Props = {
   source: 'camera' | 'upload';
   preset: EffectPreset;
   controls: EffectControls;
   composite: CompositeControls;
   resetKey: number;
-  poiControls: PoiControls;
+  poiControls: SizedPoiControls;
   poiImageUrl: string;
   onCameraError: (message: string) => void;
 };
@@ -38,7 +40,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
   const [audioName, setAudioName] = useState('');
   const [startingCamera, setStartingCamera] = useState(false);
   const effectRef = useRef({ preset, controls, composite });
-  const poiSettingsRef = useRef(poiControls);
+  const poiSettingsRef = useRef<SizedPoiControls>(poiControls);
   const poiImageRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
@@ -98,7 +100,6 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
     if (!audio) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
-
     if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
     const audioContext = audioContextRef.current;
     if (!audioSourceRef.current) {
@@ -174,9 +175,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       if (video.paused || video.ended || video.readyState < 2) return;
 
       const analyser = analyserRef.current;
-      if (analyser && spectrumRef.current.length === analyser.frequencyBinCount) {
-        analyser.getByteFrequencyData(spectrumRef.current);
-      }
+      if (analyser && spectrumRef.current.length === analyser.frequencyBinCount) analyser.getByteFrequencyData(spectrumRef.current);
 
       const frameMs = now - lastFrameAt;
       lastFrameAt = now;
@@ -212,13 +211,9 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         poiCtx.save();
         const displayScale = poiCanvas.width / trackCanvas.width;
         poiCtx.scale(displayScale, poiCanvas.height / trackCanvas.height);
-        if (activePreset.id === 'neon-rails') {
-          drawGhostPulseLayer(poiCtx, tracks, now, poi);
-        } else if (activePreset.id === 'led-club-show') {
-          drawLedClubShow(poiCtx, tracks, now, poi);
-        } else {
-          drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
-        }
+        if (activePreset.id === 'neon-rails') drawGhostPulseLayer(poiCtx, tracks, now, poi);
+        else if (activePreset.id === 'led-club-show') drawLedClubShow(poiCtx, tracks, now, poi);
+        else drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
         drawAudioClubVisualizer(poiCtx, tracks, spectrumRef.current, now);
         poiCtx.restore();
         const patternLayer = poiCanvas;
@@ -272,17 +267,25 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         trailCtx.filter = 'none';
       }
 
+      const look = poiSettingsRef.current;
+      const widthScale = Math.max(0.25, Math.min(2, (look.patternWidth ?? 100) / 100));
+      const heightScale = Math.max(0.25, Math.min(2, (look.patternHeight ?? 100) / 100));
+      const effectWidth = canvas.width * widthScale;
+      const effectHeight = canvas.height * heightScale;
+      const effectX = (canvas.width - effectWidth) / 2;
+      const effectY = (canvas.height - effectHeight) / 2;
+
       ctx.globalCompositeOperation = compositing.blendMode;
       if (settings.glow > 0) {
         ctx.save();
         ctx.globalAlpha = settings.glow / 100 * settings.intensity / 100;
         ctx.filter = effectLayerFilter(compositing.invert, `blur(${settings.glow / 10}px)`);
-        ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(trailCanvas, effectX, effectY, effectWidth, effectHeight);
         ctx.restore();
       }
       ctx.globalAlpha = settings.intensity / 100;
       ctx.filter = effectLayerFilter(compositing.invert);
-      ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(trailCanvas, effectX, effectY, effectWidth, effectHeight);
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
@@ -364,9 +367,8 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
 
   function togglePlayback() {
     const video = videoRef.current!;
-    if (video.paused) {
-      void video.play().then(() => syncAudioToVideo(true));
-    } else {
+    if (video.paused) void video.play().then(() => syncAudioToVideo(true));
+    else {
       video.pause();
       audioRef.current?.pause();
     }
