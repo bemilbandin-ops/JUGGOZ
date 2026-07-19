@@ -4,5 +4,5 @@ import { sacredGeometryTransform } from './build/sacredGeometryTransform';
 import { afterimageTrailTransform } from './build/afterimageTrailTransform';
 
 export default defineConfig({
-  plugins: [sacredGeometryTransform(), afterimageTrailTransform(), react()],
+  plugins: [afterimageTrailTransform(), sacredGeometryTransform(), react()],
 });
