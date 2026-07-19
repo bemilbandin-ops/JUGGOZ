@@ -16,6 +16,8 @@ type TrailState = {
   lastY: number;
 };
 
+type SizedPoiControls = PoiControls & { patternWidth?: number; patternHeight?: number };
+
 const trailStates = new WeakMap<PoiTrack, TrailState>();
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -34,30 +36,9 @@ function clubClipPath(length: number, thickness: number) {
 
   path.moveTo(-half, -thickness * 0.22);
   path.lineTo(-half * 0.12, -thickness * 0.25);
-  path.bezierCurveTo(
-    half * 0.2,
-    -thickness * 0.55,
-    half * 0.76,
-    -thickness * 0.62,
-    half,
-    -thickness * 0.28,
-  );
-  path.bezierCurveTo(
-    half + thickness * 0.08,
-    -thickness * 0.08,
-    half + thickness * 0.08,
-    thickness * 0.08,
-    half,
-    thickness * 0.28,
-  );
-  path.bezierCurveTo(
-    half * 0.76,
-    thickness * 0.62,
-    half * 0.2,
-    thickness * 0.55,
-    -half * 0.12,
-    thickness * 0.25,
-  );
+  path.bezierCurveTo(half * 0.2, -thickness * 0.55, half * 0.76, -thickness * 0.62, half, -thickness * 0.28);
+  path.bezierCurveTo(half + thickness * 0.08, -thickness * 0.08, half + thickness * 0.08, thickness * 0.08, half, thickness * 0.28);
+  path.bezierCurveTo(half * 0.76, thickness * 0.62, half * 0.2, thickness * 0.55, -half * 0.12, thickness * 0.25);
   path.lineTo(-half, thickness * 0.22);
   path.closePath();
 
@@ -66,13 +47,7 @@ function clubClipPath(length: number, thickness: number) {
   return path;
 }
 
-function captureActualClub(
-  source: HTMLCanvasElement,
-  centerX: number,
-  centerY: number,
-  angle: number,
-  length: number,
-) {
+function captureActualClub(source: HTMLCanvasElement, centerX: number, centerY: number, angle: number, length: number) {
   const thickness = clamp(length * 0.2, 16, 42);
   const padding = Math.max(8, thickness * 0.45);
   const width = Math.ceil(length + thickness * 0.65 + padding * 2);
@@ -94,12 +69,7 @@ function captureActualClub(
   return stamp;
 }
 
-function updateSnapshots(
-  ctx: CanvasRenderingContext2D,
-  tracks: PoiTrack[],
-  now: number,
-  controls: PoiControls,
-) {
+function updateSnapshots(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls) {
   const source = document.querySelector<HTMLCanvasElement>('.stage > canvas.is-ready');
   if (!source || source.width === 0 || source.height === 0) return;
 
@@ -113,7 +83,6 @@ function updateSnapshots(
   for (const track of tracks) {
     const state = stateFor(track);
     state.stamps = state.stamps.filter((stamp) => now - stamp.born < controls.lifetime);
-
     if (track.state === 'lost' || track.confidence < 0.18) continue;
 
     const movement = Math.hypot(track.center.x - state.lastX, track.center.y - state.lastY);
@@ -125,14 +94,7 @@ function updateSnapshots(
     const image = captureActualClub(source, centerX, centerY, track.angle, length);
     if (!image) continue;
 
-    state.stamps.push({
-      image,
-      centerX: track.center.x,
-      centerY: track.center.y,
-      angle: track.angle,
-      scale: displayScale,
-      born: now,
-    });
+    state.stamps.push({ image, centerX: track.center.x, centerY: track.center.y, angle: track.angle, scale: displayScale, born: now });
     state.stamps = state.stamps.slice(-48);
     state.lastCapturedAt = now;
     state.lastX = track.center.x;
@@ -140,14 +102,12 @@ function updateSnapshots(
   }
 }
 
-export function drawGhostPulseLayer(
-  ctx: CanvasRenderingContext2D,
-  tracks: PoiTrack[],
-  now: number,
-  controls: PoiControls,
-) {
+export function drawGhostPulseLayer(ctx: CanvasRenderingContext2D, tracks: PoiTrack[], now: number, controls: PoiControls) {
   updateSnapshots(ctx, tracks, now, controls);
 
+  const sized = controls as SizedPoiControls;
+  const widthScale = clamp((sized.patternWidth ?? 100) / 100, 0.25, 2);
+  const heightScale = clamp((sized.patternHeight ?? 100) / 100, 0.25, 2);
   const pulseAmount = 0.025 + clamp(controls.railSeparation, 0, 250) / 250 * 0.12;
   const brightness = controls.brightness / 100;
 
@@ -156,9 +116,7 @@ export function drawGhostPulseLayer(
 
   for (const track of tracks) {
     const state = stateFor(track);
-    const lostFade = track.state === 'lost'
-      ? clamp(1 - (now - track.lastSeen) / Math.min(520, controls.lostReset), 0, 1)
-      : 1;
+    const lostFade = track.state === 'lost' ? clamp(1 - (now - track.lastSeen) / Math.min(520, controls.lostReset), 0, 1) : 1;
 
     for (const stamp of state.stamps) {
       const age = now - stamp.born;
@@ -174,7 +132,7 @@ export function drawGhostPulseLayer(
       ctx.save();
       ctx.translate(stamp.centerX, stamp.centerY);
       ctx.rotate(stamp.angle);
-      ctx.scale(renderScale, renderScale);
+      ctx.scale(renderScale * widthScale, renderScale * heightScale);
       ctx.globalAlpha = alpha;
       ctx.drawImage(stamp.image, -stamp.image.width / 2, -stamp.image.height / 2);
       ctx.restore();
