@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { effectLayerFilter, extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
+import { drawGhostPulseLayer } from './ghostPulse';
 import { detectClubs, drawPoiLayer, updateTracks, type PoiControls, type PoiTrack } from './pixelPoi';
 import { isPatternId } from './pixelPoiPatterns';
 
@@ -153,9 +154,13 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         poiCtx.save();
         const displayScale = poiCanvas.width / trackCanvas.width;
         poiCtx.scale(displayScale, poiCanvas.height / trackCanvas.height);
-        drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
+        if (activePreset.id === 'neon-rails') {
+          drawGhostPulseLayer(poiCtx, tracks, now, poi);
+        } else {
+          drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
+        }
         poiCtx.restore();
-        let patternLayer = poiCanvas;
+        const patternLayer = poiCanvas;
         ctx.globalCompositeOperation = compositing.blendMode;
         if (poi.glow > 0) {
           ctx.save();
@@ -258,7 +263,8 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
     video.src = objectUrlRef.current;
     video.loop = true;
     video.onloadedmetadata = async () => {
-      setDuration(video.duration);
+      setDuration(video.duration || 0);
+      setTime(0);
       setReady(true);
       setFileName(file.name);
       await video.play();
