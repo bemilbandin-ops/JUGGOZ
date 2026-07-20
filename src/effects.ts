@@ -1,6 +1,6 @@
 import { PATTERN_PRESETS, type PatternId } from './pixelPoiPatterns';
 
-export type PresetId = PatternId | 'neon' | 'ghost' | 'smoke' | 'vortex' | 'mirror-split' | 'scanline-slice' | 'light-tunnel' | 'prism-burst';
+export type PresetId = PatternId | 'neon' | 'ghost' | 'smoke' | 'vortex' | 'mirror-split' | 'scanline-slice' | 'light-tunnel' | 'prism-burst' | 'orbit-echo';
 
 export type EffectControls = {
   trail: number;
@@ -76,6 +76,10 @@ export const PRESETS: EffectPreset[] = [
   {
     id: 'prism-burst', name: 'Prism Burst', description: 'Three angular color-separated copies split moving club light into sharp red, green, and blue shards.',
     defaults: { trail: 38, intensity: 100, glow: 28, sensitivity: 74, isolation: 78, blur: 0, expansion: 0, spin: 0, driftX: 0, driftY: 0, hue: 0, cycle: 0, saturation: 100, echo: 0 },
+  },
+  {
+    id: 'orbit-echo', name: 'Orbit Echo', description: 'Multiple color-shifted copies of the isolated club motion circle the performer in a rotating ring.',
+    defaults: { trail: 72, intensity: 96, glow: 34, sensitivity: 72, isolation: 77, blur: 0.5, expansion: 24, spin: 58, driftX: 0, driftY: 0, hue: 195, cycle: 34, saturation: 100, echo: 120 },
   },
 ];
 
