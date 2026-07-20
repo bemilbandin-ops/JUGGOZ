@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { drawAudioClubVisualizer } from './audioClubVisualizer';
+import { drawDistinctClassicEffect, isDistinctClassicEffect } from './distinctClassicEffects';
 import { effectLayerFilter, extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
 import { drawGhostPulseLayer } from './ghostPulse';
 import { drawLedClubShow } from './ledClubShow';
@@ -170,6 +171,14 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
     };
     resize();
 
+    const updateTimeline = (now: number) => {
+      if (source === 'upload' && now - lastUiUpdate > 200) {
+        lastUiUpdate = now;
+        setTime(video.currentTime);
+        void syncAudioToVideo();
+      }
+    };
+
     const render = (now: number) => {
       frame = requestAnimationFrame(render);
       if (video.paused || video.ended || video.readyState < 2) return;
@@ -216,26 +225,31 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         else drawPoiLayer(poiCtx, tracks, now, poi, activePreset.id, activePreset.id === 'radial-pov' ? image : null, displayScale);
         drawAudioClubVisualizer(poiCtx, tracks, spectrumRef.current, now);
         poiCtx.restore();
-        const patternLayer = poiCanvas;
         ctx.globalCompositeOperation = compositing.blendMode;
         if (poi.glow > 0) {
           ctx.save();
           ctx.globalAlpha = poi.glow / 150;
           ctx.filter = effectLayerFilter(compositing.invert, `blur(${Math.max(2, poi.glow * 0.065)}px)`);
-          ctx.drawImage(patternLayer, 0, 0);
+          ctx.drawImage(poiCanvas, 0, 0);
           ctx.restore();
         }
         ctx.globalAlpha = Math.min(1, poi.brightness / 82);
         ctx.filter = effectLayerFilter(compositing.invert);
-        ctx.drawImage(patternLayer, 0, 0);
+        ctx.drawImage(poiCanvas, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = 'source-over';
-        if (source === 'upload' && now - lastUiUpdate > 200) {
-          lastUiUpdate = now;
-          setTime(video.currentTime);
-          void syncAudioToVideo();
-        }
+        updateTimeline(now);
+        return;
+      }
+
+      const look = poiSettingsRef.current;
+      const widthScale = Math.max(0.25, Math.min(2, (look.patternWidth ?? 100) / 100));
+      const heightScale = Math.max(0.25, Math.min(2, (look.patternHeight ?? 100) / 100));
+
+      if (isDistinctClassicEffect(activePreset.id)) {
+        drawDistinctClassicEffect(ctx, trackCanvas, activePreset.id, now, settings, compositing, widthScale, heightScale);
+        updateTimeline(now);
         return;
       }
 
@@ -267,9 +281,6 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
         trailCtx.filter = 'none';
       }
 
-      const look = poiSettingsRef.current;
-      const widthScale = Math.max(0.25, Math.min(2, (look.patternWidth ?? 100) / 100));
-      const heightScale = Math.max(0.25, Math.min(2, (look.patternHeight ?? 100) / 100));
       const effectWidth = canvas.width * widthScale;
       const effectHeight = canvas.height * heightScale;
       const effectX = (canvas.width - effectWidth) / 2;
@@ -289,11 +300,7 @@ export function VideoStage({ source, preset, controls, composite, resetKey, poiC
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
-      if (source === 'upload' && now - lastUiUpdate > 200) {
-        lastUiUpdate = now;
-        setTime(video.currentTime);
-        void syncAudioToVideo();
-      }
+      updateTimeline(now);
     };
     frame = requestAnimationFrame(render);
     return () => cancelAnimationFrame(frame);
