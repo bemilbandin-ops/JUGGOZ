@@ -1,3 +1,5 @@
+import type { EffectTypeId } from './effectModel';
+
 export type PresetId = 'neon' | 'ghost' | 'smoke' | 'vortex';
 
 export type EffectControls = {
@@ -19,6 +21,7 @@ export type EffectControls = {
 
 export type EffectPreset = {
   id: PresetId;
+  effectTypeId: EffectTypeId;
   name: string;
   description: string;
   defaults: EffectControls;
@@ -26,22 +29,26 @@ export type EffectPreset = {
 
 export const PRESETS: EffectPreset[] = [
   {
-    id: 'neon', name: 'Neon', description: 'A tight, bright trail with crisp edges and rapid color cycling.',
+    id: 'neon', effectTypeId: 'motion-trails', name: 'Neon', description: 'A tight, bright trail with crisp edges and rapid color cycling.',
     defaults: { trail: 70, intensity: 100, glow: 20, sensitivity: 72, isolation: 78, blur: 0, expansion: 5, spin: 0, driftX: 0, driftY: 0, hue: 320, cycle: 70, saturation: 100, echo: 0 },
   },
   {
-    id: 'ghost', name: 'Ghost', description: 'Freezes crisp, separated snapshots with restrained glow and no geometric movement.',
+    id: 'ghost', effectTypeId: 'motion-trails', name: 'Ghost', description: 'Freezes crisp, separated snapshots with restrained glow and no geometric movement.',
     defaults: { trail: 82, intensity: 100, glow: 15, sensitivity: 68, isolation: 74, blur: 0, expansion: 0, spin: 0, driftX: 0, driftY: 0, hue: 185, cycle: 0, saturation: 55, echo: 160 },
   },
   {
-    id: 'smoke', name: 'Smoke', description: 'A wide, desaturated cloud that expands and rises quickly away from the props.',
+    id: 'smoke', effectTypeId: 'motion-trails', name: 'Smoke', description: 'A wide, desaturated cloud that expands and rises quickly away from the props.',
     defaults: { trail: 96, intensity: 60, glow: 50, sensitivity: 70, isolation: 70, blur: 9, expansion: 35, spin: -4, driftX: 10, driftY: -70, hue: 265, cycle: 8, saturation: 35, echo: 0 },
   },
   {
-    id: 'vortex', name: 'Vortex', description: 'A long, saturated trail pulled sharply inward while rotating around the frame center.',
+    id: 'vortex', effectTypeId: 'motion-trails', name: 'Vortex', description: 'A long, saturated trail pulled sharply inward while rotating around the frame center.',
     defaults: { trail: 96, intensity: 90, glow: 35, sensitivity: 70, isolation: 74, blur: 1, expansion: -28, spin: 65, driftX: 0, driftY: 0, hue: 215, cycle: 25, saturation: 90, echo: 0 },
   },
 ];
+
+export function presetsForEffectType(effectTypeId: EffectTypeId): EffectPreset[] {
+  return PRESETS.filter((preset) => preset.effectTypeId === effectTypeId);
+}
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
