@@ -1,17 +1,16 @@
 import { useState } from 'react';
+import { EFFECT_TYPES, effectTypeForPreset, getEffectType, type EffectTypeId } from './effectTypes';
 import { BLEND_MODES, DEFAULT_COMPOSITE_CONTROLS, PRESETS, type CompositeControls, type EffectControls, type EffectPreset } from './effects';
 import { PATTERN_CONTROL_DEFAULTS, type PoiControls } from './pixelPoi';
 import { isPatternId, PATTERN_PRESETS, type PatternCategory, type PatternId } from './pixelPoiPatterns';
 import { VideoStage } from './VideoStage';
 
 const INITIAL_PRESET = PRESETS[0];
-type PresetCategory = PatternCategory | 'classic';
 type ClubLookControls = PoiControls & { patternWidth: number; patternHeight: number };
 const withLookControls = (controls: PoiControls): ClubLookControls => ({ ...controls, patternWidth: 100, patternHeight: 100 });
-const PRESET_CATEGORIES: { id: PresetCategory; label: string; description: string }[] = [
+const PRESET_CATEGORIES: { id: PatternCategory; label: string; description: string }[] = [
   { id: 'geometric', label: 'Geometric', description: '10 structured motion patterns' },
   { id: 'psychedelic', label: 'Psychedelic', description: '6 fluid, high-color patterns' },
-  { id: 'classic', label: 'Classic', description: '8 full-frame effects' },
 ];
 const PATTERN_CATEGORY_BY_ID = new Map(PATTERN_PRESETS.map(({ id, category }) => [id, category]));
 const HELP: Record<keyof EffectControls, string> = {
@@ -66,19 +65,32 @@ export function App() {
   const [poiImageUrl, setPoiImageUrl] = useState('');
   const [resetKey, setResetKey] = useState(0);
   const [notice, setNotice] = useState('');
-  const [activeCategory, setActiveCategory] = useState<PresetCategory>('geometric');
-  const clubPreset = isPatternId(preset.id);
-  const visiblePresets = PRESETS.filter((item) => activeCategory === 'classic' ? !isPatternId(item.id) : isPatternId(item.id) && PATTERN_CATEGORY_BY_ID.get(item.id) === activeCategory);
+  const [activeCategory, setActiveCategory] = useState<PatternCategory>('geometric');
+  const activeEffectTypeId = effectTypeForPreset(preset.id);
+  const activeEffectType = getEffectType(activeEffectTypeId);
+  const clubPreset = activeEffectTypeId === 'tracked-club';
+  const activeCategoryInfo = PRESET_CATEGORIES.find(({ id }) => id === activeCategory)!;
+  const visiblePresets = PRESETS.filter((item) => {
+    if (effectTypeForPreset(item.id) !== activeEffectTypeId) return false;
+    if (activeEffectTypeId !== 'tracked-club') return true;
+    return isPatternId(item.id) && PATTERN_CATEGORY_BY_ID.get(item.id) === activeCategory;
+  });
+  const presetPanelLabel = clubPreset ? `category-${activeCategory}` : `effect-type-${activeEffectTypeId}`;
 
   function choosePreset(next: EffectPreset, mode: 'current' | 'defaults' = 'defaults') {
     setPreset(next);
-    setActiveCategory(isPatternId(next.id) ? PATTERN_CATEGORY_BY_ID.get(next.id)! : 'classic');
+    if (isPatternId(next.id)) setActiveCategory(PATTERN_CATEGORY_BY_ID.get(next.id)!);
     if (!isPatternId(next.id) || mode === 'defaults') setControls(next.defaults);
     if (isPatternId(next.id) && mode === 'defaults') {
       const { patternWidth, patternHeight } = poiControls;
       setPoiControls({ ...withLookControls(PATTERN_CONTROL_DEFAULTS[next.id]), patternWidth, patternHeight });
     }
     setResetKey((key) => key + 1);
+  }
+
+  function chooseEffectType(nextId: EffectTypeId) {
+    const firstPreset = PRESETS.find((item) => effectTypeForPreset(item.id) === nextId);
+    if (firstPreset) choosePreset(firstPreset);
   }
 
   function updateControl(key: keyof EffectControls, value: number) {
@@ -117,18 +129,33 @@ export function App() {
       <div className="workspace">
         <VideoStage source={source} preset={preset} controls={controls} composite={composite} resetKey={resetKey} poiControls={poiControls} poiImageUrl={poiImageUrl} onCameraError={(message) => setNotice(`Camera unavailable: ${message}`)} />
         <aside aria-label="Effects">
-          <nav className="pattern-categories" aria-label="Pattern categories" role="tablist">
-            {PRESET_CATEGORIES.map((category) => (
-              <button key={category.id} id={`category-${category.id}`} role="tab" aria-selected={activeCategory === category.id} aria-controls="preset-panel" onClick={() => setActiveCategory(category.id)}>
-                {category.label}<span>{category.id === 'geometric' ? 10 : category.id === 'psychedelic' ? 6 : 8}</span>
+          <nav className="pattern-categories" aria-label="Effect types" role="tablist">
+            {EFFECT_TYPES.map((effectType) => (
+              <button key={effectType.id} id={`effect-type-${effectType.id}`} role="tab" aria-selected={activeEffectTypeId === effectType.id} aria-controls="preset-panel" onClick={() => chooseEffectType(effectType.id)}>
+                {effectType.name}<span>{PRESETS.filter((item) => effectTypeForPreset(item.id) === effectType.id).length}</span>
               </button>
             ))}
           </nav>
           <div className="category-heading">
-            <h2>{PRESET_CATEGORIES.find(({ id }) => id === activeCategory)!.label}</h2>
-            <p>{PRESET_CATEGORIES.find(({ id }) => id === activeCategory)!.description}</p>
+            <h2>{activeEffectType.name}</h2>
+            <p>{activeEffectType.description}</p>
           </div>
-          <div className="presets" id="preset-panel" role="tabpanel" aria-labelledby={`category-${activeCategory}`} tabIndex={0}>
+
+          {clubPreset && (
+            <nav className="pattern-categories" aria-label="Tracked-club look categories" role="tablist" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              {PRESET_CATEGORIES.map((category) => (
+                <button key={category.id} id={`category-${category.id}`} role="tab" aria-selected={activeCategory === category.id} aria-controls="preset-panel" onClick={() => setActiveCategory(category.id)}>
+                  {category.label}<span>{PATTERN_PRESETS.filter((item) => item.category === category.id).length}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+
+          <div className="category-heading">
+            <h2>{clubPreset ? activeCategoryInfo.label : 'Looks'}</h2>
+            <p>{clubPreset ? activeCategoryInfo.description : `Settings for the ${activeEffectType.name} renderer`}</p>
+          </div>
+          <div className="presets" id="preset-panel" role="tabpanel" aria-labelledby={presetPanelLabel} tabIndex={0}>
             {visiblePresets.map((item) => isPatternId(item.id) ? (
               <PatternCard key={item.id} item={item} active={preset.id === item.id} onActivate={(mode) => choosePreset(item, mode)} />
             ) : (
