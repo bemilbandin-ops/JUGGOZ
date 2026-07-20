@@ -26,7 +26,7 @@ export const EFFECT_TYPES: readonly EffectType[] = [
   {
     id: 'frame-distortion',
     name: 'Frame distortions',
-    description: 'Slices, mirrors, separates, or projects the isolated motion with dedicated full-frame drawing code.',
+    description: 'Slices, mirrors, separates, duplicates, or projects isolated motion with dedicated full-frame drawing code.',
     rendererKey: 'distinct-classic',
   },
 ];
@@ -56,6 +56,7 @@ export const PRESET_EFFECT_TYPES: Record<PresetId, EffectTypeId> = {
   'scanline-slice': 'frame-distortion',
   'light-tunnel': 'frame-distortion',
   'prism-burst': 'frame-distortion',
+  'orbit-echo': 'frame-distortion',
 };
 
 export function effectTypeForPreset(id: PresetId): EffectTypeId {
