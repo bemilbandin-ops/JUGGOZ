@@ -29,6 +29,8 @@ assert(EFFECT_TYPES.every(({ id }) => PRESETS.some((item) => effectTypeForPreset
 assert(PRESETS.every(({ id }) => effectTypeForPreset(id) === (isPatternId(id) ? 'tracked-club' : isDistinctClassicEffect(id) ? 'frame-distortion' : 'motion-trail')), 'the effect-type registry must match the renderer dispatch used by VideoStage');
 assert(['neon', 'ghost', 'smoke', 'vortex'].every((id) => effectTypeForPreset(id as typeof PRESETS[number]['id']) === 'motion-trail'), 'legacy trail looks must share the motion-trail renderer family');
 assert(effectTypeForPreset('neon') !== effectTypeForPreset('mirror-split'), 'a trail preset and a frame distortion must not be presented as the same effect type');
+assert(isDistinctClassicEffect('orbit-echo') && effectTypeForPreset('orbit-echo') === 'frame-distortion', 'Orbit Echo must be implemented and displayed as a Frame Distortions look');
+assert(preset('orbit-echo').defaults.spin !== preset('mirror-split').defaults.spin, 'Orbit Echo must have its own tuned default profile');
 
 const expectedGeometric = ['Ghost Trail', 'LED Club Show', 'Prism Ribbon', 'Chromatic Echoes', 'Electric Comets', 'Kinetic Lattice', 'Dissolve Streak', 'Forest Mandala', 'Club Echo', 'Radial POV'];
 const expectedPsychedelic = ['Crystalline Constellation', 'Vector Swarm', 'Volumetric Fan Rays', 'Lava Plasma', 'Atomic Shell', 'Digital Glitch'];
@@ -88,4 +90,4 @@ const output = image([0, 0, 0, 0, 0, 0, 0, 0]);
 extractMotion(current, new Float32Array(8), output, 20, 200);
 assert(output.data[3] === 0 && output.data[7] > 0, 'brightness isolation must preserve bright moving clubs and reject dim subjects');
 
-console.log('effect types, club geometry, state, resampling, and isolation checks passed');
+console.log('effect types, Orbit Echo, club geometry, state, resampling, and isolation checks passed');
