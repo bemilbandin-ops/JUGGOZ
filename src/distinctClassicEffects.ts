@@ -1,6 +1,6 @@
 import type { CompositeControls, EffectControls, PresetId } from './effects';
 
-const DISTINCT_CLASSIC_IDS = new Set<PresetId>(['mirror-split', 'scanline-slice', 'light-tunnel', 'prism-burst']);
+const DISTINCT_CLASSIC_IDS = new Set<PresetId>(['mirror-split', 'scanline-slice', 'light-tunnel', 'prism-burst', 'orbit-echo']);
 
 export function isDistinctClassicEffect(id: PresetId) {
   return DISTINCT_CLASSIC_IDS.has(id);
@@ -76,6 +76,40 @@ export function drawDistinctClassicEffect(
       ctx.globalAlpha = alpha * 0.68;
       ctx.filter = `hue-rotate(${controls.hue + copy.hue}deg) saturate(${Math.max(1.4, controls.saturation / 45)}) contrast(1.35)`;
       ctx.drawImage(source, -drawWidth / 2 + copy.x, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+    }
+  } else if (id === 'orbit-echo') {
+    ctx.translate(width / 2 + controls.driftX * 0.7, height / 2 + controls.driftY * 0.7);
+    const copies = Math.max(5, Math.min(14, Math.round(5 + controls.trail * 0.09)));
+    const direction = controls.spin < 0 ? -1 : 1;
+    const speed = direction * (0.00012 + Math.abs(controls.spin) * 0.000012);
+    const orbitRadius = Math.min(width, height) * (0.09 + Math.max(-100, Math.min(100, controls.expansion)) * 0.0014);
+    const pulse = 0.92 + Math.sin(now * (0.001 + controls.cycle * 0.00003)) * 0.08;
+    const copyWidth = drawWidth * 0.42 * pulse;
+    const copyHeight = drawHeight * 0.42 * pulse;
+    const baseRotation = now * speed;
+
+    for (let index = 0; index < copies; index++) {
+      const phase = index / copies;
+      const angle = baseRotation + phase * Math.PI * 2 + controls.echo * 0.0008;
+      const radius = orbitRadius * (0.88 + Math.sin(now * 0.0018 + index * 1.7) * 0.12);
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle + Math.PI / 2);
+      ctx.globalAlpha = alpha * (0.28 + (1 - phase) * 0.34);
+      ctx.filter = `hue-rotate(${controls.hue + phase * 300 + now * controls.cycle * 0.002}deg) saturate(${Math.max(1.2, controls.saturation / 48)}) blur(${Math.max(0, controls.blur * 0.22)}px)`;
+      ctx.drawImage(source, -copyWidth / 2, -copyHeight / 2, copyWidth, copyHeight);
+      ctx.restore();
+    }
+
+    if (controls.glow > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha * controls.glow / 240;
+      ctx.filter = `blur(${Math.max(2, controls.glow * 0.12)}px) saturate(${Math.max(1.5, controls.saturation / 40)})`;
+      ctx.drawImage(source, -drawWidth * 0.22, -drawHeight * 0.22, drawWidth * 0.44, drawHeight * 0.44);
       ctx.restore();
     }
   }
