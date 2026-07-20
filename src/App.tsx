@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { PRESETS, type EffectControls, type EffectPreset } from './effects';
+import { PRESETS, presetsForEffectType, type EffectControls, type EffectPreset } from './effects';
+import { EFFECT_TYPES, getEffectType, type EffectType } from './effectTypes';
 import { VideoStage } from './VideoStage';
 
 const INITIAL_PRESET = PRESETS[0];
@@ -26,11 +27,18 @@ export function App() {
   const [controls, setControls] = useState<EffectControls>(INITIAL_PRESET.defaults);
   const [resetKey, setResetKey] = useState(0);
   const [notice, setNotice] = useState('');
+  const activeEffectType = getEffectType(preset.effectTypeId);
+  const visiblePresets = presetsForEffectType(activeEffectType.id);
 
   function choosePreset(next: EffectPreset) {
     setPreset(next);
     setControls(next.defaults);
     setResetKey((key) => key + 1);
+  }
+
+  function chooseEffectType(next: EffectType) {
+    const firstPreset = presetsForEffectType(next.id)[0];
+    if (firstPreset) choosePreset(firstPreset);
   }
 
   function updateControl(key: keyof EffectControls, value: number) {
@@ -50,17 +58,39 @@ export function App() {
       </header>
 
       <div className="workspace">
-        <VideoStage source={source} preset={preset} controls={controls} resetKey={resetKey} onCameraError={(message) => setNotice(`Camera unavailable: ${message}`)} />
+        <VideoStage source={source} effectTypeId={activeEffectType.id} controls={controls} resetKey={resetKey} onCameraError={(message) => setNotice(`Camera unavailable: ${message}`)} />
         <aside aria-label="Effects">
-          <div className="presets">
-            {PRESETS.map((item) => (
-              <button key={item.id} className={`preset ${item.id} ${preset.id === item.id ? 'active' : ''}`} onClick={() => choosePreset(item)} aria-describedby={`preset-${item.id}-help`}>
-                <span className="preset-art" aria-hidden="true" />
-                <strong>{item.name}</strong>
-                <span className="tooltip" role="tooltip" id={`preset-${item.id}-help`}>{item.description}</span>
-              </button>
-            ))}
-          </div>
+          <section className="effect-type-picker" aria-labelledby="effect-type-title">
+            <div className="section-heading">
+              <h2 id="effect-type-title">Effect type</h2>
+              <span>Different drawing code</span>
+            </div>
+            <div className="effect-types">
+              {EFFECT_TYPES.map((item) => (
+                <button key={item.id} className={`effect-type ${activeEffectType.id === item.id ? 'active' : ''}`} onClick={() => chooseEffectType(item)}>
+                  <span className="effect-type-badge">Base effect</span>
+                  <strong>{item.name}</strong>
+                  <small>{item.description}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="preset-picker" aria-labelledby="preset-title">
+            <div className="section-heading">
+              <h2 id="preset-title">Looks</h2>
+              <span>Settings for {activeEffectType.name}</span>
+            </div>
+            <div className="presets">
+              {visiblePresets.map((item) => (
+                <button key={item.id} className={`preset ${item.id} ${preset.id === item.id ? 'active' : ''}`} onClick={() => choosePreset(item)} aria-describedby={`preset-${item.id}-help`}>
+                  <span className="preset-art" aria-hidden="true" />
+                  <strong>{item.name}</strong>
+                  <span className="tooltip" role="tooltip" id={`preset-${item.id}-help`}>{item.description}</span>
+                </button>
+              ))}
+            </div>
+          </section>
 
           <div className="controls">
             <ControlGroup title="Tracking">
