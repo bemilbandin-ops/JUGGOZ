@@ -1,6 +1,8 @@
+import { isDistinctClassicEffect } from './distinctClassicEffects';
+import { EFFECT_TYPES, effectTypeForPreset, PRESET_EFFECT_TYPES } from './effectTypes';
 import { BLEND_MODES, effectLayerFilter, extractMotion, lightThreshold, motionThreshold, PRESETS, trailFade, trailTransform } from './effects';
 import { CLUB_EFFECTS, createTrack, DEFAULT_POI_CONTROLS, PATTERN_CONTROL_DEFAULTS, unwrapShaftAngle, updateTrackPose } from './pixelPoi';
-import { DEFAULT_PATTERN_ID, PATTERN_PRESETS } from './pixelPoiPatterns';
+import { DEFAULT_PATTERN_ID, isPatternId, PATTERN_PRESETS } from './pixelPoiPatterns';
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message);
@@ -18,10 +20,20 @@ const extreme = trailTransform({ ...preset('neon').defaults, expansion: 100, spi
 assert(extreme.zoom >= 1.035 && extreme.rotation >= 0.03, 'legacy transforms must remain intact');
 assert(preset('ghost').defaults.echo >= 100 && preset('smoke').defaults.blur >= 6, 'unrelated legacy presets must remain intact');
 
-const expectedGeometric = ['Neon Rails', 'Prism Ribbon', 'Chromatic Echoes', 'Electric Comets', 'Kinetic Lattice', 'Psychedelic Serpent', 'Apex Shatter', 'Pixel Mosaic', 'Radial POV'];
+const effectTypeIds = new Set(EFFECT_TYPES.map(({ id }) => id));
+const rendererKeys = new Set(EFFECT_TYPES.map(({ rendererKey }) => rendererKey));
+assert(effectTypeIds.size === EFFECT_TYPES.length, 'effect type IDs must be unique');
+assert(rendererKeys.size === EFFECT_TYPES.length, 'each effect type must identify a different renderer family');
+assert(PRESETS.every(({ id }) => effectTypeIds.has(PRESET_EFFECT_TYPES[id])), 'every preset must be assigned to a registered effect type');
+assert(EFFECT_TYPES.every(({ id }) => PRESETS.some((item) => effectTypeForPreset(item.id) === id)), 'every effect type must expose at least one look');
+assert(PRESETS.every(({ id }) => effectTypeForPreset(id) === (isPatternId(id) ? 'tracked-club' : isDistinctClassicEffect(id) ? 'frame-distortion' : 'motion-trail')), 'the effect-type registry must match the renderer dispatch used by VideoStage');
+assert(['neon', 'ghost', 'smoke', 'vortex'].every((id) => effectTypeForPreset(id as typeof PRESETS[number]['id']) === 'motion-trail'), 'legacy trail looks must share the motion-trail renderer family');
+assert(effectTypeForPreset('neon') !== effectTypeForPreset('mirror-split'), 'a trail preset and a frame distortion must not be presented as the same effect type');
+
+const expectedGeometric = ['Ghost Trail', 'LED Club Show', 'Prism Ribbon', 'Chromatic Echoes', 'Electric Comets', 'Kinetic Lattice', 'Dissolve Streak', 'Forest Mandala', 'Club Echo', 'Radial POV'];
 const expectedPsychedelic = ['Crystalline Constellation', 'Vector Swarm', 'Volumetric Fan Rays', 'Lava Plasma', 'Atomic Shell', 'Digital Glitch'];
-assert(PATTERN_PRESETS.filter(({ category }) => category === 'geometric').map(({ name }) => name).join('|') === expectedGeometric.join('|'), 'geometric category must preserve the original nine patterns');
-assert(PATTERN_PRESETS.filter(({ category }) => category === 'psychedelic').map(({ name }) => name).join('|') === expectedPsychedelic.join('|'), 'psychedelic category must contain the six new patterns');
+assert(PATTERN_PRESETS.filter(({ category }) => category === 'geometric').map(({ name }) => name).join('|') === expectedGeometric.join('|'), 'geometric category must preserve the current ten patterns');
+assert(PATTERN_PRESETS.filter(({ category }) => category === 'psychedelic').map(({ name }) => name).join('|') === expectedPsychedelic.join('|'), 'psychedelic category must contain the six current patterns');
 assert(PRESETS[0].id === DEFAULT_PATTERN_ID && DEFAULT_PATTERN_ID === 'neon-rails', 'Neon Rails must be the default');
 assert(new Set(PATTERN_PRESETS.map(({ geometry }) => geometry)).size === PATTERN_PRESETS.length, 'every club preset must declare a distinct topology');
 assert(Object.keys(CLUB_EFFECTS).length === PATTERN_PRESETS.length, 'every club preset must own a renderer');
@@ -76,4 +88,4 @@ const output = image([0, 0, 0, 0, 0, 0, 0, 0]);
 extractMotion(current, new Float32Array(8), output, 20, 200);
 assert(output.data[3] === 0 && output.data[7] > 0, 'brightness isolation must preserve bright moving clubs and reject dim subjects');
 
-console.log('club geometry, state, resampling, and isolation checks passed');
+console.log('effect types, club geometry, state, resampling, and isolation checks passed');
