@@ -37,6 +37,18 @@ h1 span { color: #ff5a5f; }
 .filename { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8b8e96; }
 
 aside { min-height: 0; overflow: auto; padding: 22px; border-left: 1px solid #25272d; background: #0d0f13; }
+.effect-type-picker, .preset-picker { display: grid; gap: 10px; }
+.preset-picker { margin-top: 18px; padding-top: 18px; border-top: 1px solid #34363d; }
+.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.section-heading h2 { margin: 0; color: #f4f2ef; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.section-heading span { color: #777a82; font-size: 10px; text-align: right; }
+.effect-types { display: grid; gap: 8px; }
+.effect-type { width: 100%; display: grid; gap: 6px; padding: 13px; border: 1px solid #34363d; border-radius: 8px; text-align: left; background: #111319; cursor: pointer; }
+.effect-type:hover { background: #17191e; }
+.effect-type.active { border-color: #ff5a5f; box-shadow: inset 0 0 0 1px rgb(255 90 95 / 16%); }
+.effect-type-badge { justify-self: start; padding: 3px 6px; border-radius: 999px; color: #ff8b8e; background: rgb(255 90 95 / 12%); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.effect-type strong { font-size: 15px; }
+.effect-type small { color: #8b8e96; font-size: 11px; line-height: 1.4; }
 .presets { display: grid; gap: 8px; }
 .preset { position: relative; width: 100%; display: grid; grid-template-columns: 94px 1fr; gap: 15px; align-items: center; padding: 7px; border: 1px solid transparent; border-radius: 8px; text-align: left; background: transparent; cursor: pointer; }
 .preset:hover { background: #14161b; }
