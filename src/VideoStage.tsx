@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { extractMotion, lightThreshold, motionThreshold, trailFade, trailTransform, type EffectControls, type EffectPreset } from './effects';
+import { extractMotion, lightThreshold, motionThreshold, type EffectControls } from './effects';
+import { createEffectRenderer } from './effectTypes';
+import type { EffectTypeId } from './effectModel';
 
 type Props = {
   source: 'camera' | 'upload';
-  preset: EffectPreset;
+  effectTypeId: EffectTypeId;
   controls: EffectControls;
   resetKey: number;
   onCameraError: (message: string) => void;
 };
 
-export function VideoStage({ source, preset, controls, resetKey, onCameraError }: Props) {
+export function VideoStage({ source, effectTypeId, controls, resetKey, onCameraError }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -21,11 +23,11 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
   const [time, setTime] = useState(0);
   const [fileName, setFileName] = useState('');
   const [startingCamera, setStartingCamera] = useState(false);
-  const effectRef = useRef({ preset, controls });
+  const effectRef = useRef({ effectTypeId, controls });
 
   useEffect(() => {
-    effectRef.current = { preset, controls };
-  }, [preset, controls]);
+    effectRef.current = { effectTypeId, controls };
+  }, [effectTypeId, controls]);
 
   useEffect(() => {
     setReady(false);
@@ -51,14 +53,10 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
     const ctx = canvas.getContext('2d', { alpha: false })!;
     const trackCanvas = document.createElement('canvas');
     const trackCtx = trackCanvas.getContext('2d', { willReadFrequently: true })!;
-    const trailCanvas = document.createElement('canvas');
-    const trailCtx = trailCanvas.getContext('2d')!;
-    const transformed = document.createElement('canvas');
-    const transformedCtx = transformed.getContext('2d')!;
+    const renderer = createEffectRenderer(effectTypeId);
     let background: Float32Array | null = null;
     let mask: ImageData | null = null;
     let frame = 0;
-    let lastSample = 0;
     let quality = 400;
     let slowFrames = 0;
     let lastFrameAt = performance.now();
@@ -72,8 +70,7 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
       canvas.height = height;
       trackCanvas.width = quality;
       trackCanvas.height = Math.round(quality / aspect);
-      trailCanvas.width = transformed.width = trackCanvas.width;
-      trailCanvas.height = transformed.height = trackCanvas.height;
+      renderer.resize(trackCanvas.width, trackCanvas.height);
       background = null;
       mask = null;
     };
@@ -101,55 +98,19 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
       const current = trackCtx.getImageData(0, 0, trackCanvas.width, trackCanvas.height);
       if (!background) background = Float32Array.from(current.data);
       if (!mask) mask = new ImageData(trackCanvas.width, trackCanvas.height);
-      const active = effectRef.current;
-      const settings = active.controls;
-      const activePreset = active.preset;
+      const settings = effectRef.current.controls;
       extractMotion(current, background, mask, motionThreshold(settings.sensitivity), lightThreshold(settings.isolation));
       trackCtx.putImageData(mask, 0, 0);
 
-      transformedCtx.clearRect(0, 0, transformed.width, transformed.height);
-      transformedCtx.filter = settings.blur > 0 ? `blur(${settings.blur * 0.08}px)` : 'none';
-      transformedCtx.drawImage(trailCanvas, 0, 0);
-      transformedCtx.filter = 'none';
-      trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
-      trailCtx.save();
-      const transform = trailTransform(settings);
-      trailCtx.translate(trailCanvas.width / 2, trailCanvas.height / 2);
-      trailCtx.rotate(transform.rotation);
-      trailCtx.scale(transform.zoom, transform.zoom);
-      trailCtx.translate(
-        -trailCanvas.width / 2 + transform.dx,
-        -trailCanvas.height / 2 + transform.dy,
-      );
-      trailCtx.drawImage(transformed, 0, 0);
-      trailCtx.restore();
+      renderer.render({
+        now,
+        output: ctx,
+        mask: trackCanvas,
+        displayWidth: canvas.width,
+        displayHeight: canvas.height,
+        controls: settings,
+      });
 
-      trailCtx.globalCompositeOperation = 'destination-out';
-      trailCtx.fillStyle = `rgba(0,0,0,${trailFade(settings.trail)})`;
-      trailCtx.fillRect(0, 0, trailCanvas.width, trailCanvas.height);
-      trailCtx.globalCompositeOperation = 'source-over';
-
-      if (!settings.echo || now - lastSample >= settings.echo) {
-        lastSample = now;
-        const hue = (settings.hue + now * settings.cycle * 0.0006) % 360;
-        const blur = Math.max(0.35, settings.blur);
-        trailCtx.filter = `brightness(.7) contrast(1.45) sepia(1) saturate(${settings.saturation / 8}) hue-rotate(${hue}deg) blur(${blur}px)`;
-        trailCtx.drawImage(trackCanvas, 0, 0);
-        trailCtx.filter = 'none';
-      }
-
-      ctx.globalCompositeOperation = 'screen';
-      if (settings.glow > 0) {
-        ctx.save();
-        ctx.globalAlpha = settings.glow / 100 * settings.intensity / 100;
-        ctx.filter = `blur(${settings.glow / 10}px)`;
-        ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-      }
-      ctx.globalAlpha = settings.intensity / 100;
-      ctx.drawImage(trailCanvas, 0, 0, canvas.width, canvas.height);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
       if (source === 'upload' && now - lastUiUpdate > 200) {
         lastUiUpdate = now;
         setTime(video.currentTime);
@@ -157,7 +118,7 @@ export function VideoStage({ source, preset, controls, resetKey, onCameraError }
     };
     frame = requestAnimationFrame(render);
     return () => cancelAnimationFrame(frame);
-  }, [ready, resetKey, source]);
+  }, [ready, resetKey, source, effectTypeId]);
 
   async function startCamera() {
     if (startingCamera) return;
